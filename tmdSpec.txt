@@ -1,0 +1,27 @@
+sigExp: 4
+sig: 256
+padding: 60
+issuer: 64
+version: 1
+crlVersion: 1
+signerCrlVersion: 1
+paddingByte: 1
+startupIos: 8
+titleId: 8
+titleType: 4
+groupId: 2
+padding2: 2
+region: 2
+reserved: 58
+accessRights: 4
+titleVersion: 2
+numOfContents: 2 *
+bootIndex: 2
+padding3: 2
+
+per content: (36)
+contentId: 4 *
+index: 2
+type: 2
+contentSize: 8
+contentHash: 20
