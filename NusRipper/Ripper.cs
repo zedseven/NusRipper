@@ -29,13 +29,25 @@ namespace NusRipper
 
 		private class RudimentaryMetadata
 		{
-			public readonly short NumContents;
-			public readonly int[] ContentIds;
+			public class RudimentaryContentInfo
+			{
+				public int Id;
+				public short Index;
 
-			public RudimentaryMetadata(short numContents, int[] contentIds)
+				public RudimentaryContentInfo(int id, short index)
+				{
+					Id = id;
+					Index = index;
+				}
+			}
+
+			public readonly short NumContents;
+			public readonly RudimentaryContentInfo[] ContentInfo;
+
+			public RudimentaryMetadata(short numContents, RudimentaryContentInfo[] contentInfo)
 			{
 				NumContents = numContents;
-				ContentIds = contentIds;
+				ContentInfo = contentInfo;
 			}
 		}
 
@@ -63,7 +75,7 @@ namespace NusRipper
 				// Parse out the content IDs from the metadata file, and download them
 				RudimentaryMetadata metadata = GetNecessaryMetadataInfo(metadataPath);
 				for (int i = 0; i < metadata.NumContents; i++)
-					await DownloadTitleFile(client, metadataDir, titleId, metadata.ContentIds[i].ToString("x8"));
+					await DownloadTitleFile(client, metadataDir, titleId, metadata.ContentInfo[i].Id.ToString("x8"));
 			}
 		}
 
@@ -112,7 +124,8 @@ namespace NusRipper
 				await fs.FlushAsync();
 			}
 
-			new Hasher.FileHashCollection(fileDownloadPath).WriteToFile(Path.Combine(downloadDir, hashesDownloadPath));
+			Hasher.FileHashCollection coll = new Hasher.FileHashCollection(fileDownloadPath);
+			coll.WriteToFile(hashesDownloadPath);
 
 			return fileDownloadPath;
 		}
@@ -122,21 +135,13 @@ namespace NusRipper
 			byte[] bytes = File.ReadAllBytes(metadataPath);
 
 			short numContents = BitConverter.ToInt16(bytes.Slice(NumContentsOffset, 2));
-			List<int> contentIds = new List<int>();
+			List<RudimentaryMetadata.RudimentaryContentInfo> contentInfo = new List<RudimentaryMetadata.RudimentaryContentInfo>();
 			for (int i = 0; i < numContents; i++)
-				contentIds.Add(BitConverter.ToInt32(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk, 4)));
+				contentInfo.Add(new RudimentaryMetadata.RudimentaryContentInfo(
+					BitConverter.ToInt32(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk, 4)),
+					BitConverter.ToInt16(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk + 4, 2))));
 
-			return new RudimentaryMetadata(numContents, contentIds.ToArray());
-		}
-
-		private static T[] Slice<T>(this IReadOnlyList<T> arr, int start, int length)
-		{
-			T[] ret = new T[length];
-			for (int i = 0; i < length; i++)
-				ret[i] = arr[i + start];
-			if (BitConverter.IsLittleEndian)
-				Array.Reverse(ret);
-			return ret;
+			return new RudimentaryMetadata(numContents, contentInfo.ToArray());
 		}
 	}
 }

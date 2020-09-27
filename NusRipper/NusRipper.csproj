@@ -9,4 +9,10 @@
     <PackageReference Include="Crc32.NET" Version="1.2.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="NusKeys">
+      <HintPath>..\..\NusKeys\NusKeys\bin\Release\netcoreapp3.1\NusKeys.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>
