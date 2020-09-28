@@ -1,7 +1,7 @@
 ﻿using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using Force.Crc32;
+using NullFX.CRC;
 
 namespace NusRipper
 {
@@ -29,7 +29,7 @@ namespace NusRipper
 				byte[] bytes = File.ReadAllBytes(filePath);
 
 				FileSize = bytes.LongLength;
-				Crc32Hash = Crc32Algorithm.Compute(bytes);
+				Crc32Hash = Crc32.ComputeChecksum(bytes);
 				Md5Hash = MD5.Create().ComputeHash(bytes);
 				Sha1Hash = SHA1.Create().ComputeHash(bytes);
 				Sha256Hash = SHA256.Create().ComputeHash(bytes);

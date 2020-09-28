@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace NusRipper
@@ -26,5 +27,9 @@ namespace NusRipper
 
 		public static T[] Pad<T>(this T[] arr, int length, T value = default)
 			=> arr.Concat(Enumerable.Repeat(value, length - arr.Length)).ToArray();
+
+		// https://stackoverflow.com/a/12800424/6003488
+		public static string GetSafeFilename(string filename)
+			=> string.Join("", filename.Split(Path.GetInvalidFileNameChars()));
 	}
 }

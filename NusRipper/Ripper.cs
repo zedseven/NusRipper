@@ -17,17 +17,17 @@ namespace NusRipper
 
 		public static bool DownloadSuffixlessMetadata = false;
 
-		private const string TicketFileName = "cetk";
-		private const string MetadataFileName = "tmd";
+		public const string TicketFileName = "cetk";
+		public const string MetadataFileName = "tmd";
 
-		private const string HeaderFileSuffix = ".headers.txt";
-		private const string HashesFileSuffix = ".checks.txt";
+		public const string HeaderFileSuffix = ".headers.txt";
+		public const string HashesFileSuffix = ".checks.txt";
 
 		private const int NumContentsOffset = 0x000001DE;
 		private const int ContentsListOffset = 0x000001E4;
 		private const int BytesPerContentChunk = 36;
 
-		private class RudimentaryMetadata
+		public class RudimentaryMetadata
 		{
 			public class RudimentaryContentInfo
 			{
@@ -48,6 +48,20 @@ namespace NusRipper
 			{
 				NumContents = numContents;
 				ContentInfo = contentInfo;
+			}
+
+			public RudimentaryMetadata(string metadataPath)
+			{
+				byte[] bytes = File.ReadAllBytes(metadataPath);
+
+				NumContents = BitConverter.ToInt16(bytes.Slice(NumContentsOffset, 2));
+				List<RudimentaryContentInfo> contentInfo = new List<RudimentaryContentInfo>();
+				for (int i = 0; i < NumContents; i++)
+					contentInfo.Add(new RudimentaryContentInfo(
+						BitConverter.ToInt32(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk, 4)),
+						BitConverter.ToInt16(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk + 4, 2))));
+
+				ContentInfo = contentInfo.ToArray();
 			}
 		}
 
@@ -73,7 +87,7 @@ namespace NusRipper
 					continue;
 
 				// Parse out the content IDs from the metadata file, and download them
-				RudimentaryMetadata metadata = GetNecessaryMetadataInfo(metadataPath);
+				RudimentaryMetadata metadata = new RudimentaryMetadata(metadataPath);
 				for (int i = 0; i < metadata.NumContents; i++)
 					await DownloadTitleFile(client, metadataDir, titleId, metadata.ContentInfo[i].Id.ToString("x8"));
 			}
@@ -128,20 +142,6 @@ namespace NusRipper
 			coll.WriteToFile(hashesDownloadPath);
 
 			return fileDownloadPath;
-		}
-
-		private static RudimentaryMetadata GetNecessaryMetadataInfo(string metadataPath)
-		{
-			byte[] bytes = File.ReadAllBytes(metadataPath);
-
-			short numContents = BitConverter.ToInt16(bytes.Slice(NumContentsOffset, 2));
-			List<RudimentaryMetadata.RudimentaryContentInfo> contentInfo = new List<RudimentaryMetadata.RudimentaryContentInfo>();
-			for (int i = 0; i < numContents; i++)
-				contentInfo.Add(new RudimentaryMetadata.RudimentaryContentInfo(
-					BitConverter.ToInt32(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk, 4)),
-					BitConverter.ToInt16(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk + 4, 2))));
-
-			return new RudimentaryMetadata(numContents, contentInfo.ToArray());
 		}
 	}
 }

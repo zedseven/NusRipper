@@ -2,7 +2,7 @@
   "profiles": {
     "NusRipper": {
       "commandName": "Project",
-      "commandLineArgs": "list \"Y:\\Emus\\DSiWare\\NUS Backup\\dsi_cdn_hashes\\DSi_DSiWare_CETK_CRC32.txt\" \"Y:\\Emus\\DSiWare\\NUS Backup\\Dropzone\""
+      "commandLineArgs": "decrypt \"Y:\\Emus\\DSiWare\\Common Keys\\DSiKey.bin\" \"Y:\\Emus\\DSiWare\\NUS Backup\\Dropzone\" true 1"
     }
   }
 }

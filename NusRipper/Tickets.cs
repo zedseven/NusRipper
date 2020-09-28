@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using NusKeys;
 
 namespace NusRipper
 {
@@ -43,7 +44,7 @@ namespace NusRipper
 			public Ticket(byte[] decTitleKey)
 				=> titleKey = decTitleKey;
 
-			public async Task DecryptContent(short contentIndex, string encPath, string decPath = null)
+			public async Task<string> DecryptContent(short contentIndex, string encPath, string decPath = null)
 			{
 				decPath ??= $"{encPath}.app";
 
@@ -64,6 +65,8 @@ namespace NusRipper
 					await efs.CopyToAsync(cs);
 					cs.FlushFinalBlock();
 				}
+
+				return decPath;
 			}
 		}
 	}
