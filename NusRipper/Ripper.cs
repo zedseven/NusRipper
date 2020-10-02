@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -13,7 +12,7 @@ namespace NusRipper
 		/// <summary>
 		/// The base of the CDN download URL. The final URL for an entry follows the format of 'http://nus.cdn.t.shop.nintendowifi.net/ccs/download/[titleid]/[file]'.
 		/// </summary>
-		private const string DownloadUrlBase = "http://nus.cdn.t.shop.nintendowifi.net/ccs/download/";
+		private const string DownloadUrlBase = "http://nus.cdn.t.shop.nintendowifi.net/ccs/download";
 
 		public static bool DownloadSuffixlessMetadata = false;
 
@@ -23,47 +22,7 @@ namespace NusRipper
 		public const string HeaderFileSuffix = ".headers.txt";
 		public const string HashesFileSuffix = ".checks.txt";
 
-		private const int NumContentsOffset = 0x000001DE;
-		private const int ContentsListOffset = 0x000001E4;
-		private const int BytesPerContentChunk = 36;
-
-		public class RudimentaryMetadata
-		{
-			public class RudimentaryContentInfo
-			{
-				public int Id;
-				public short Index;
-
-				public RudimentaryContentInfo(int id, short index)
-				{
-					Id = id;
-					Index = index;
-				}
-			}
-
-			public readonly short NumContents;
-			public readonly RudimentaryContentInfo[] ContentInfo;
-
-			public RudimentaryMetadata(short numContents, RudimentaryContentInfo[] contentInfo)
-			{
-				NumContents = numContents;
-				ContentInfo = contentInfo;
-			}
-
-			public RudimentaryMetadata(string metadataPath)
-			{
-				byte[] bytes = File.ReadAllBytes(metadataPath);
-
-				NumContents = BitConverter.ToInt16(bytes.Slice(NumContentsOffset, 2));
-				List<RudimentaryContentInfo> contentInfo = new List<RudimentaryContentInfo>();
-				for (int i = 0; i < NumContents; i++)
-					contentInfo.Add(new RudimentaryContentInfo(
-						BitConverter.ToInt32(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk, 4)),
-						BitConverter.ToInt16(bytes.Slice(ContentsListOffset + i * BytesPerContentChunk + 4, 2))));
-
-				ContentInfo = contentInfo.ToArray();
-			}
-		}
+		private const int MaxDownloadAttempts = 5;
 
 		public static async Task DownloadTitle(HttpClient client, string downloadDir, string titleId, params int[] metadataVersions)
 		{
@@ -87,7 +46,7 @@ namespace NusRipper
 					continue;
 
 				// Parse out the content IDs from the metadata file, and download them
-				RudimentaryMetadata metadata = new RudimentaryMetadata(metadataPath);
+				TitleMetadata metadata = new TitleMetadata(metadataPath);
 				for (int i = 0; i < metadata.NumContents; i++)
 					await DownloadTitleFile(client, metadataDir, titleId, metadata.ContentInfo[i].Id.ToString("x8"));
 			}
@@ -95,47 +54,74 @@ namespace NusRipper
 
 		public static async Task<string> DownloadTitleFile(HttpClient client, string downloadDir, string titleId, string file)
 		{
-			string downloadUrl = $"{DownloadUrlBase}{titleId}/{file}";
-
-			HttpResponseMessage response = client.GetAsync(downloadUrl).Result;
+			string downloadUrl = $"{DownloadUrlBase}/{titleId}/{file}";
 
 			string fileDownloadPath = Path.Combine(downloadDir, file);
 			string headerDownloadPath = Path.Combine(downloadDir, $"{file}{HeaderFileSuffix}");
 			string hashesDownloadPath = Path.Combine(downloadDir, $"{file}{HashesFileSuffix}");
 
-			if (!response.IsSuccessStatusCode)
-				return null;
-
-			await using (FileStream fs = new FileStream(fileDownloadPath, FileMode.Create))
-			await using (StreamWriter sw = File.CreateText(headerDownloadPath))
+			//Log.Instance.Trace($"Threads in use: {Process.GetCurrentProcess().Threads.Count}");
+			//HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, downloadUrl) {Headers = { ConnectionClose = true }};
+			for(int i = 0; i < MaxDownloadAttempts; i++)
 			{
-				// Write interaction headers
-				string headerContents = Enumerable
-					.Empty<(string name, string value)>()
-					.Concat(
-						response.Headers
-							.SelectMany(kvp => kvp.Value
-								.Select(v => (name: kvp.Key, value: v))
-							)
-					)
-					.Concat(
-						response.Content.Headers
-							.SelectMany(kvp => kvp.Value
-								.Select(v => (name: kvp.Key, value: v))
-							)
-					)
-					.Aggregate(
-						new StringBuilder(),
-						(sb, pair) => sb.Append(pair.name).Append(": ").Append(pair.value).AppendLine(),
-						sb => sb.ToString()
-					);
+				try
+				{
+					HttpResponseMessage response = client.GetAsync(downloadUrl/*, HttpCompletionOption.ResponseHeadersRead*/).Result;
+					//HttpResponseMessage response = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).Result;
 
-				await sw.WriteAsync(headerContents);
-				await sw.FlushAsync();
+					if (!response.IsSuccessStatusCode)
+					{
+						Log.Instance.Error($"Received the following HTTP response code for '{downloadUrl}': {(int) response.StatusCode} {response.StatusCode}");
+						return null;
+					}
 
-				// Write file contents
-				await response.Content.CopyToAsync(fs);
-				await fs.FlushAsync();
+					await using (FileStream fs = new FileStream(fileDownloadPath, FileMode.Create))
+					await using (StreamWriter sw = File.CreateText(headerDownloadPath))
+					{
+						// Write interaction headers
+						string headerContents = Enumerable
+							.Empty<(string name, string value)>()
+							.Concat(
+								response.Headers
+									.SelectMany(kvp => kvp.Value
+										.Select(v => (name: kvp.Key, value: v))
+									)
+							)
+							.Concat(
+								response.Content.Headers
+									.SelectMany(kvp => kvp.Value
+										.Select(v => (name: kvp.Key, value: v))
+									)
+							)
+							.Aggregate(
+								new StringBuilder(),
+								(sb, pair) => sb.Append(pair.name).Append(": ").Append(pair.value).AppendLine(),
+								sb => sb.ToString()
+							);
+
+						await sw.WriteAsync(headerContents);
+						await sw.FlushAsync();
+
+						// Write file contents
+						await response.Content.CopyToAsync(fs);
+						await fs.FlushAsync();
+					}
+				}
+				// I'm aware catch-all clauses are bad practice, but due to the yet-unfixed .NET bug https://github.com/dotnet/runtime/issues/23870
+				// race conditions cause a plethora of exception types that can't all be predicted and often aren't very descriptive.
+				// ReSharper disable once CatchAllClause
+				catch (Exception e)
+				{
+					Log.Instance.Error($"Download failed for '{downloadUrl}' (Attempt #{i + 1}) - Exception: '{e.Message}' - Retrying...");
+					if (i >= MaxDownloadAttempts - 1)
+					{
+						Log.Instance.Error($"Max number of download attempts ({MaxDownloadAttempts}) reached for this file. Giving up and moving on.");
+						return null;
+					}
+					continue;
+				}
+
+				break;
 			}
 
 			Hasher.FileHashCollection coll = new Hasher.FileHashCollection(fileDownloadPath);

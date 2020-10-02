@@ -1,6 +1,5 @@
 ﻿using System.IO;
 using System.Security.Cryptography;
-using System.Text;
 using NullFX.CRC;
 
 namespace NusRipper
@@ -48,12 +47,7 @@ namespace NusRipper
 			}
 		}
 
-		private static string ToHexString(this byte[] bytes)
-		{
-			StringBuilder hex = new StringBuilder(bytes.Length * 2);
-			foreach (byte b in bytes)
-				hex.AppendFormat("{0:x2}", b);
-			return hex.ToString();
-		}
+		public static byte[] CalcSha1Hash(string path)
+			=> SHA1.Create().ComputeHash(File.ReadAllBytes(path));
 	}
 }

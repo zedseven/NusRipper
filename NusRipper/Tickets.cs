@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using NusKeys;
 
 namespace NusRipper
 {
@@ -13,13 +12,13 @@ namespace NusRipper
 
 		public class Ticket
 		{
-			public readonly byte[] titleKey;
+			private readonly byte[] titleKey;
 
 			public Ticket(byte[] commonKey, string titleId, string ticketPath)
 			{
 				byte[] ticketBytes = File.ReadAllBytes(ticketPath);
 
-				byte[] encTitleKey = ticketBytes.Slice(TitleKeyOffset, 16, false);
+				byte[] encTitleKey = ticketBytes.Slice(TitleKeyOffset, 16);
 
 				Aes aes = new AesManaged
 				{
@@ -44,7 +43,7 @@ namespace NusRipper
 			public Ticket(byte[] decTitleKey)
 				=> titleKey = decTitleKey;
 
-			public async Task<string> DecryptContent(short contentIndex, string encPath, string decPath = null)
+			public async Task<string> DecryptContent(ushort contentIndex, string encPath, string decPath = null)
 			{
 				decPath ??= $"{encPath}.app";
 

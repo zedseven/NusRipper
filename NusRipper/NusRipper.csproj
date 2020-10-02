@@ -6,13 +6,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NLog" Version="4.7.5" />
     <PackageReference Include="NullFX.CRC" Version="1.1.1" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="1.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <Reference Include="NusKeys">
       <HintPath>..\..\NusKeys\NusKeys\bin\Release\netcoreapp3.1\NusKeys.dll</HintPath>
     </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="NLog.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

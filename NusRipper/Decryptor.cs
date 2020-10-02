@@ -1,72 +1,18 @@
-﻿using System;
+﻿using NusKeys;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Gif;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using NusKeys;
 
 namespace NusRipper
 {
 	public static class Decryptor
 	{
-		private static readonly string[] KeyGenTryPasswords = { "nintendo", "mypass", "FB10", "test", "password", "twilight", "twl", "shop" };
+		private static readonly string[] KeyGenTryPasswords = { "nintendo", "mypass", "FB10", "test", "", "password", "twilight", "twl", "shop" };
 
-		private const int GameTitleOffset = 0x00000000;
-		private const int GameTitleSize = 12;
-		private const int GameCodeOffset = 0x0000000C;
-		private const int GameCodeSize = 4;
-		private const int TitleInfoAddressOffset = 0x00000068;
-		private const int TitleInfoAddressSize = 4;
-		private const int TitleInfoTitlesOffset = 0x00000240;
-		private const int TitleInfoTitleSize = 0x100;
-		private const int HeaderChecksumOffset = 0x0000015E;
-
-		public class RomInfo
-		{
-			public readonly string GameTitle;
-			public readonly string GameCode;
-
-			public readonly string[] Titles = new string[8];
-
-			public const int TitleJapaneseIndex = 0;
-			public const int TitleEnglishIndex = 1;
-			public const int TitleFrenchIndex = 2;
-			public const int TitleGermanIndex = 3;
-			public const int TitleItalianIndex = 4;
-			public const int TitleSpanishIndex = 5;
-			public const int TitleChineseIndex = 6;
-			public const int TitleKoreanIndex = 7;
-
-			public readonly bool ValidContent;
-
-			// TODO: Could be cool to have icon stored here too
-
-			public RomInfo(string decPath)
-			{
-				byte[] contentBytes = File.ReadAllBytes(decPath);
-
-				ushort headerChecksum = CalcCrc16Modbus(contentBytes.Slice(0, HeaderChecksumOffset, false));
-				ushort romChecksumValue = BitConverter.ToUInt16(contentBytes.Slice(HeaderChecksumOffset, 2).Reverse().ToArray());
-				ValidContent = headerChecksum == romChecksumValue;
-				if (!ValidContent)
-					return;
-
-				GameTitle = new string(contentBytes.Slice(GameTitleOffset, GameTitleSize, false).Select(b => (char) b).ToArray()).TrimEnd('\0');
-				GameCode = new string(contentBytes.Slice(GameCodeOffset, GameCodeSize, false).Select(b => (char) b).ToArray());
-
-				int titleInfoAddress = BitConverter.ToInt32(contentBytes.Slice(TitleInfoAddressOffset, TitleInfoAddressSize, true).Reverse().ToArray());
-
-				if (titleInfoAddress == 0x00000000)
-					return;
-
-				UnicodeEncoding encoding = new UnicodeEncoding(false, false);
-				for (int i = 0; i < Titles.Length; i++)
-					Titles[i] = encoding.GetString(contentBytes.Slice(titleInfoAddress + TitleInfoTitlesOffset + TitleInfoTitleSize * i, TitleInfoTitleSize, false));
-			}
-		}
-
-		public static async Task<(TicketBooth.Ticket ticket, List<string> contentsList)> MakeTicketAndDecryptMetadataContents(byte[] titleIdBytes, Ripper.RudimentaryMetadata metadata, string titleDir, bool makeQolFiles = false)
+		public static async Task<(TicketBooth.Ticket ticket, List<string> contentsList)> MakeTicketAndDecryptMetadataContents(byte[] titleIdBytes, TitleMetadata metadata, string titleDir, bool makeQolFiles = false)
 		{
 			if (metadata.NumContents <= 0)
 				return (null, new List<string>());
@@ -76,17 +22,22 @@ namespace NusRipper
 			bool success = false;
 			string contentPath = Path.Combine(titleDir, metadata.ContentInfo[0].Id.ToString("x8"));
 			string appPath = "";
+			// TODO: Not needed for any known DSiWare titles, but could be a decent idea to test the gamecode of the game as a password
 			foreach (string tryPass in KeyGenTryPasswords)
 			{
 				byte[] titleKey = TitleKeyGen.Derive(titleIdBytes, tryPass);
 				ticket = new TicketBooth.Ticket(titleKey);
 				appPath = await ticket.DecryptContent(metadata.ContentInfo[0].Index, contentPath);
 
-				RomInfo cInfo = new RomInfo(appPath);
+				RomInfo cInfo = new RomInfo(appPath, makeQolFiles);
 				success = cInfo.ValidContent;
 				if (!success)
 					continue;
-				//NonBlockingConsole.WriteLine($"'{tryPass}' is the password for the title key of '{contentPath}'!");
+				Log.Instance.Trace($"'{tryPass}' is the password for the title key of '{contentPath}'!");
+
+				// Somewhat redundant given the CRC validation of the decrypted ROM in RomInfo, but still
+				VerifyMetadataContent(metadata, appPath, 0, titleDir, metadata.ContentInfo[0].Id.ToString("x8"));
+
 				contentsList.Add(metadata.ContentInfo[0].Id.ToString("x8"));
 				if (makeQolFiles)
 					MakeQolFiles(cInfo, titleDir);
@@ -95,7 +46,7 @@ namespace NusRipper
 
 			if (!success)
 			{
-				NonBlockingConsole.WriteLine($"Unable to find the password for the title key of '{contentPath}'.");
+				Log.Instance.Error($"Unable to find the password for the title key of '{contentPath}'.");
 				File.Delete(appPath);
 				return (null, new List<string>());
 			}
@@ -105,13 +56,14 @@ namespace NusRipper
 				string contentName = metadata.ContentInfo[i].Id.ToString("x8");
 				contentsList.Add(contentName);
 				contentPath = Path.Combine(titleDir, contentName);
-				await ticket.DecryptContent(metadata.ContentInfo[i].Index, contentPath);
+				string decPath = await ticket.DecryptContent(metadata.ContentInfo[i].Index, contentPath);
+				VerifyMetadataContent(metadata, decPath, i, titleDir, contentName);
 			}
 
 			return (ticket, contentsList);
 		}
 
-		public static async Task<List<string>> DecryptMetadataContents(TicketBooth.Ticket ticket, Ripper.RudimentaryMetadata metadata, string titleDir, bool makeQolFiles = false)
+		public static async Task<List<string>> DecryptMetadataContents(TicketBooth.Ticket ticket, TitleMetadata metadata, string titleDir, bool makeQolFiles = false)
 		{
 			if (metadata.NumContents <= 0)
 				return new List<string>();
@@ -123,49 +75,47 @@ namespace NusRipper
 				contentsList.Add(contentName);
 				string contentPath = Path.Combine(titleDir, contentName);
 				string appPath = await ticket.DecryptContent(metadata.ContentInfo[i].Index, contentPath);
+
+				// TODO: Could verify enc and dec file sizes match metadata recorded size, but at this point I don't think it's worth the additional processing time.
+
+				VerifyMetadataContent(metadata, appPath, i, titleDir, contentName);
+
 				if (i != 0 || !makeQolFiles)
 					continue;
-				RomInfo cInfo = new RomInfo(appPath);
+				RomInfo cInfo = new RomInfo(appPath, makeQolFiles);
 				MakeQolFiles(cInfo, titleDir);
 			}
 
 			return contentsList;
 		}
 
-		public static void MakeQolFiles(RomInfo info, string titleDir)
+		public static bool VerifyMetadataContent(TitleMetadata metadata, string decPath, int contentIndex, string titleDir, string contentIdStr)
 		{
-			string gameTitle = "";
-			if (info.GameCode == null)
-				return;
-			if (info.Titles[RomInfo.TitleEnglishIndex] != null)
-				gameTitle = Helpers.GetSafeFilename($"{info.GameCode} - {info.GameTitle} - {info.Titles[RomInfo.TitleEnglishIndex].Replace('\n', ' ')}.txt");
-			else if (info.GameTitle != null)
-				gameTitle = Helpers.GetSafeFilename($"{info.GameCode} - {info.GameTitle}.txt");
+			byte[] decHash = Hasher.CalcSha1Hash(decPath);
+			if (!metadata.ContentInfo[contentIndex].DecSha1Hash.SequenceEqual(decHash))
+			{
+				Log.Instance.Error(
+					$"Hash for '{decPath}' does not match the recorded hash in '{Path.Combine(titleDir, metadata.FileName)}' (content index {metadata.ContentInfo[contentIndex].Index}). " +
+					$"(`{metadata.ContentInfo[contentIndex].DecSha1Hash.ToHexString()}` != `{decHash.ToHexString()}`)");
+				return false;
+			}
 			else
-				gameTitle = Helpers.GetSafeFilename($"{info.GameCode}.txt");
-			using (File.Create(Path.Combine(titleDir, gameTitle))) { }
+			{
+				Log.Instance.Trace(
+					$"Hash for '{decPath}' matches the recorded hash in '{Path.Combine(titleDir, metadata.FileName)}' (content index {metadata.ContentInfo[contentIndex].Index}). " +
+					$"(`{metadata.ContentInfo[contentIndex].DecSha1Hash.ToHexString()}`)");
+				return true;
+			}
 		}
 
-		private static ushort CalcCrc16Modbus(byte[] bytes)
+		public static void MakeQolFiles(RomInfo info, string titleDir)
 		{
-			ushort crc = 0xFFFF;
+			if (info.GameCode == null)
+				return;
+			using (File.Create(Path.Combine(titleDir, Helpers.GetSafeFilename($"{info.GetProperName(true)}.txt")))) { }
 
-			for (int pos = 0; pos < bytes.Length; pos++)
-			{
-				crc ^= bytes[pos];
-
-				for (int i = 8; i != 0; i--)
-				{
-					if ((crc & 0x0001) != 0)
-					{
-						crc >>= 1;
-						crc ^= 0xA001;
-					}
-					else
-						crc >>= 1;
-				}
-			}
-			return crc;
+			info.StaticIcon?.SaveAsPng(Path.Combine(titleDir, "icon.png"));
+			info.AnimatedIcon?.SaveAsGif(Path.Combine(titleDir, "icon.gif"), new GifEncoder { ColorTableMode = GifColorTableMode.Local });
 		}
 	}
 }

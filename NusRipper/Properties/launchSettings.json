@@ -2,7 +2,7 @@
   "profiles": {
     "NusRipper": {
       "commandName": "Project",
-      "commandLineArgs": "decrypt \"Y:\\Emus\\DSiWare\\Common Keys\\DSiKey.bin\" \"Y:\\Emus\\DSiWare\\NUS Backup\\Dropzone\" true 1"
+      "commandLineArgs": "decrypt \"Y:\\Emus\\DSiWare\\Common Keys\\DSiKey.bin\" \"Y:\\Emus\\DSiWare\\NUS Backup\\Test2\" true"
     }
   }
 }
