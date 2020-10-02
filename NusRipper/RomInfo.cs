@@ -150,14 +150,6 @@ namespace NusRipper
 			GifMetadata gifMetadata = AnimatedIcon.Metadata.GetFormatMetadata(GifFormat.Instance);
 			gifMetadata.RepeatCount = 0;
 			gifMetadata.Comments = new List<string> { $"Icon for the DSiWare title \"{GetFriendlyTitle()}\" (game code \"{GameCode}\")." };
-
-			for (int i = 0; i < AnimatedIcon.Frames.Count; i++)
-			{
-				var fuck = new Image<Rgba32>(32, 32);
-				fuck.Frames.AddFrame(AnimatedIcon.Frames[i]);
-				fuck.Frames.RemoveFrame(0);
-				fuck.SaveAsPng(Path.Combine(Path.GetDirectoryName(decPath), $"frame{i}.png"));
-			}
 		}
 
 		private byte[] ParseBitmapIndices(byte[] bitmapBytes)
