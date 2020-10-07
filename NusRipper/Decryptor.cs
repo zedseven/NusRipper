@@ -2,15 +2,73 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Gif;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace NusRipper
 {
-	public static class Decryptor
+	internal static class Decryptor
 	{
 		private static readonly string[] KeyGenTryPasswords = { "nintendo", "mypass", "FB10", "test", "", "password", "twilight", "twl", "shop" };
+
+		internal static async Task DecryptEntries(byte[] commonKey, string archiveDir, bool makeQolFiles = false/*, int maxThreads = -1*/)
+		{
+			Stopwatch stopwatch = Stopwatch.StartNew();
+			Log.Instance.Info($"Beginning batch processing of the folder '{archiveDir}', with QoL files {(!makeQolFiles ? "not " : "")}being created.");
+
+			//Parallel.ForEach(Directory.EnumerateDirectories(archiveDir), new ParallelOptions { MaxDegreeOfParallelism = maxThreads }, async titleDir =>
+			foreach (string titleDir in Directory.EnumerateDirectories(archiveDir))
+			{
+				string titleId = Path.GetFileName(titleDir);
+
+				Log.Instance.Info($"Starting on '{titleId}'.");
+
+				TicketBooth.Ticket ticket = null;
+				List<string> decryptedContents = new List<string>();
+				IEnumerable<string> metadataFiles = Directory.EnumerateFiles(titleDir).Where(p => Constants.MetadataFileRegex.IsMatch(p));
+				string ticketPath = Path.Combine(titleDir, Ripper.TicketFileName);
+				if (File.Exists(ticketPath))
+				{
+					Log.Instance.Trace($"A ticket exists for '{titleDir}'.");
+					ticket = new TicketBooth.Ticket(commonKey, titleId, ticketPath);
+					foreach (string metadataPath in metadataFiles)
+						decryptedContents.AddRange(await DecryptMetadataContents(ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
+				}
+				else
+				{
+					foreach (string metadataPath in metadataFiles)
+					{
+						if (ticket == null)
+						{
+							(TicketBooth.Ticket ticket, List<string> contentsList) res =
+								await MakeTicketAndDecryptMetadataContents(Helpers.HexStringToBytes(titleId),
+									new TitleMetadata(metadataPath), titleDir, makeQolFiles);
+							ticket = res.ticket;
+							decryptedContents.AddRange(res.contentsList);
+						}
+						else
+							decryptedContents.AddRange(await DecryptMetadataContents(ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
+					}
+				}
+
+				if (ticket == null)
+					continue;
+
+				IEnumerable<string> contentFiles = Directory.EnumerateFiles(titleDir).Select(Path.GetFileName).Where(p => Constants.ContentEncryptedFileRegex.IsMatch(p));
+
+				IEnumerable<string> remainingContents = contentFiles.Except(decryptedContents);
+				foreach (string contentName in remainingContents)
+				{
+					string contentPath = Path.Combine(titleDir, contentName);
+					Log.Instance.Warn($"Attempting to decrypt content without associated metadata: '{contentPath}'");
+					await ticket.DecryptContent(0, contentPath);
+				}
+			}//);
+
+			Log.Instance.Info($"Completed the batch processing in {stopwatch.Elapsed.ToNiceString()}.");
+		}
 
 		public static async Task<(TicketBooth.Ticket ticket, List<string> contentsList)> MakeTicketAndDecryptMetadataContents(byte[] titleIdBytes, TitleMetadata metadata, string titleDir, bool makeQolFiles = false)
 		{
@@ -36,7 +94,7 @@ namespace NusRipper
 				Log.Instance.Trace($"'{tryPass}' is the password for the title key of '{contentPath}'!");
 
 				// Somewhat redundant given the CRC validation of the decrypted ROM in RomInfo, but still
-				VerifyMetadataContent(metadata, appPath, 0, titleDir, metadata.ContentInfo[0].Id.ToString("x8"));
+				VerifyMetadataContent(metadata, appPath, 0, titleDir, metadata.ContentInfo[0].Id.ToString("X8"));
 
 				contentsList.Add(metadata.ContentInfo[0].Id.ToString("x8"));
 				if (makeQolFiles)
@@ -99,13 +157,11 @@ namespace NusRipper
 					$"(`{metadata.ContentInfo[contentIndex].DecSha1Hash.ToHexString()}` != `{decHash.ToHexString()}`)");
 				return false;
 			}
-			else
-			{
-				Log.Instance.Trace(
-					$"Hash for '{decPath}' matches the recorded hash in '{Path.Combine(titleDir, metadata.FileName)}' (content index {metadata.ContentInfo[contentIndex].Index}). " +
-					$"(`{metadata.ContentInfo[contentIndex].DecSha1Hash.ToHexString()}`)");
-				return true;
-			}
+
+			Log.Instance.Trace(
+				$"Hash for '{decPath}' matches the recorded hash in '{Path.Combine(titleDir, metadata.FileName)}' (content index {metadata.ContentInfo[contentIndex].Index}). " +
+				$"(`{metadata.ContentInfo[contentIndex].DecSha1Hash.ToHexString()}`)");
+			return true;
 		}
 
 		public static void MakeQolFiles(RomInfo info, string titleDir)

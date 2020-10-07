@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace NusRipper
 {
@@ -38,6 +39,9 @@ namespace NusRipper
 		private const float ColourIntensityConversion = 255f / 31f;
 		private const float FrameDurationConversion = 1f / 60f * 100f;
 
+		public const int GameCodeLength = 4;
+		private const int TitleIdLength = 16;
+
 		public enum TitleInfoVersions
 		{
 			Original = 0x0001,
@@ -50,6 +54,7 @@ namespace NusRipper
 
 		public readonly string GameTitle;
 		public readonly string GameCode;
+		public readonly char RegionCode;
 
 		public readonly string[] Titles = new string[8];
 
@@ -80,8 +85,14 @@ namespace NusRipper
 			if (!ValidContent)
 				return;
 
-			GameTitle = new string(contentBytes.Slice(GameTitleOffset, GameTitleSize).Select(b => (char) b).ToArray()).TrimEnd('\0');
-			GameCode = new string(contentBytes.Slice(GameCodeOffset, GameCodeSize).Select(b => (char) b).ToArray());
+			GameTitle = new string(contentBytes.Slice(GameTitleOffset, GameTitleSize).AsChars()).TrimEnd('\0');
+			GameCode = new string(contentBytes.Slice(GameCodeOffset, GameCodeSize).AsChars());
+			
+			if(GameCode.Length >= GameCodeLength)
+				RegionCode = GameCode[GameCodeLength - 1];
+			else
+				Log.Instance.Warn($"The gamecode for '{decPath}' is not valid: '{GameCode}'");
+
 
 			int titleInfoAddress = BitConverter.ToInt32(contentBytes.Slice(TitleInfoAddressOffset, TitleInfoAddressSize, true).Reverse().ToArray());
 
@@ -143,13 +154,16 @@ namespace NusRipper
 				Image<Rgba32> frame = BuildImage(bitmapPaletteIndices[bitmapIndex], paletteColours[paletteIndex], flipHorizontal, flipVertical);
 
 				ImageFrame<Rgba32> aFrame = AnimatedIcon.Frames.AddFrame(frame.Frames.RootFrame);
-				aFrame.Metadata.GetFormatMetadata(GifFormat.Instance).FrameDelay = (int) Math.Round(frameDuration * FrameDurationConversion);
+				GifFrameMetadata frameMetadata = aFrame.Metadata.GetFormatMetadata(GifFormat.Instance);
+				frameMetadata.FrameDelay = (int) Math.Round(frameDuration * FrameDurationConversion);
+				frameMetadata.DisposalMethod = GifDisposalMethod.RestoreToBackground;
 			}
 			AnimatedIcon.Frames.RemoveFrame(0);
 			AnimatedIcon.Metadata.GetFormatMetadata(GifFormat.Instance).RepeatCount = 0;
 			GifMetadata gifMetadata = AnimatedIcon.Metadata.GetFormatMetadata(GifFormat.Instance);
 			gifMetadata.RepeatCount = 0;
 			gifMetadata.Comments = new List<string> { $"Icon for the DSiWare title \"{GetFriendlyTitle()}\" (game code \"{GameCode}\")." };
+			// TODO: Some gifs with regions that change transparency experience ghosting (Go Fetch! 2 is a good example)
 		}
 
 		private byte[] ParseBitmapIndices(byte[] bitmapBytes)
@@ -250,6 +264,13 @@ namespace NusRipper
 				}
 			}
 			return crc;
+		}
+
+		// If the game code can't be gleaned from the ROM, it can be retrieved from the last 8 characters in a title ID
+		public static string DeriveGameCodeFromTitleId(string titleId)
+		{
+			string gameCodeChunk = titleId.Substring(TitleIdLength - GameCodeLength * 2);
+			return new string(Helpers.HexStringToBytes(gameCodeChunk).AsChars());
 		}
 	}
 }

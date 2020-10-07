@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -23,6 +24,30 @@ namespace NusRipper
 		public const string HashesFileSuffix = ".checks.txt";
 
 		private const int MaxDownloadAttempts = 5;
+
+		internal static async Task DownloadFromList(string listPath, string downloadDir, int maxThreads = 8)
+		{
+			maxThreads = maxThreads < -1 ? -1 : maxThreads;
+			maxThreads = maxThreads == 0 ? 1 : maxThreads;
+
+			Stopwatch stopwatch = Stopwatch.StartNew();
+			Log.Instance.Info($"Beginning download from the list '{listPath}' with {(maxThreads > -1 ? maxThreads.ToString() : "unlimited")} max thread{(maxThreads != 1 ? "s" : "")}.");
+			
+			string[] listLines = await File.ReadAllLinesAsync(listPath);
+			HttpClient client = new HttpClient();
+			Parallel.ForEach(listLines, new ParallelOptions { MaxDegreeOfParallelism = maxThreads }, async line =>
+			{
+				string[] lineParts = line.Split(' ').Select(l => l.Trim()).ToArray();
+				if (lineParts.Length < 2)
+					return;
+				Log.Instance.Info(line);
+				string titleDir = Path.Combine(downloadDir, lineParts[0]);
+				Directory.CreateDirectory(titleDir);
+				await DownloadTitleFile(client, titleDir, lineParts[0], lineParts[1]);
+			});
+
+			Log.Instance.Info($"Completed the download from the list in {stopwatch.Elapsed.ToNiceString()}.");
+		}
 
 		public static async Task DownloadTitle(HttpClient client, string downloadDir, string titleId, params int[] metadataVersions)
 		{

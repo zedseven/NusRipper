@@ -8,6 +8,7 @@ namespace NusRipper
 {
 	public static class TicketBooth
 	{
+		public const string DecryptedContentExtension = "app";
 		private const int TitleKeyOffset = 0x000001BF;
 
 		public class Ticket
@@ -43,9 +44,9 @@ namespace NusRipper
 			public Ticket(byte[] decTitleKey)
 				=> titleKey = decTitleKey;
 
-			public async Task<string> DecryptContent(ushort contentIndex, string encPath, string decPath = null)
+			public async Task<string> DecryptContent(ushort contentIndex, string encPath, string decExt = DecryptedContentExtension)
 			{
-				decPath ??= $"{encPath}.app";
+				string decPath = $"{encPath}.{decExt}";
 
 				Aes aes = new AesManaged
 				{
