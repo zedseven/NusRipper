@@ -94,7 +94,7 @@ namespace NusRipper
 				Log.Instance.Trace($"'{tryPass}' is the password for the title key of '{contentPath}'!");
 
 				// Somewhat redundant given the CRC validation of the decrypted ROM in RomInfo, but still
-				VerifyMetadataContent(metadata, appPath, 0, titleDir, metadata.ContentInfo[0].Id.ToString("X8"));
+				VerifyMetadataContent(metadata, appPath, 0, titleDir, metadata.ContentInfo[0].Id.ToString("x8"));
 
 				contentsList.Add(metadata.ContentInfo[0].Id.ToString("x8"));
 				if (makeQolFiles)
