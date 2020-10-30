@@ -30,7 +30,9 @@ namespace NusRipper
 						await Decryptor.DecryptEntries(commonKey, args[2]);
 					break;
 				case "dom":
-					if (args.Length >= 4)
+					if (args.Length >= 5)
+						await DatOMatic.BuildXmlFromFiles(args[1], args[2], args[3], args[4].ToLower().Trim() == "true");
+					else if (args.Length >= 4)
 						await DatOMatic.BuildXmlFromFiles(args[1], args[2], args[3]);
 					else
 						await DatOMatic.BuildXmlFromFiles(args[1], args[2]);

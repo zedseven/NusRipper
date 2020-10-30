@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
@@ -52,6 +53,13 @@ namespace NusRipper
 		[Pure]
 		public static string AsNullIfEmpty(this string str)
 			=> str.Length <= 0 ? null : str;
+
+		[Pure]
+		public static TimeSpan ElapsedAfterStopped(this Stopwatch stopwatch)
+		{
+			stopwatch.Stop();
+			return stopwatch.Elapsed;
+		}
 
 		[Pure]
 		public static string ToNiceString(this TimeSpan timeSpan)

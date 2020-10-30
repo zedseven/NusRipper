@@ -13,6 +13,7 @@
     <PackageReference Include="NLog" Version="4.7.5" />
     <PackageReference Include="NTextCat" Version="0.3.65" />
     <PackageReference Include="NullFX.CRC" Version="1.1.1" />
+    <PackageReference Include="Romanization.NET" Version="0.9.3" />
     <PackageReference Include="SixLabors.ImageSharp" Version="1.0.1" />
   </ItemGroup>
 
@@ -27,6 +28,9 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="NLog.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="ReferenceFiles\DSi23DS.csv">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

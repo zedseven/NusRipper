@@ -10,6 +10,7 @@ namespace NusRipper
 	internal static class Languages
 	{
 		[Pure]
+		[Serializable]
 		public class LanguageCode : IEquatable<LanguageCode>
 		{
 			public readonly string Code;
@@ -55,7 +56,7 @@ namespace NusRipper
 				=> AnglicisedName;
 		}
 
-		public static readonly string ConfusingCharacters = @"[\.\?\!\:\;\'\""©™×\/\\]";
+		public const string ConfusingCharacters = @"[\.\?\!\:\;\'\""©™×\/\\0-9]";
 
 		public static readonly List<string> ConfusingProperNouns = new List<string>(new []
 		{
@@ -65,8 +66,9 @@ namespace NusRipper
 			"DSi",
 			"DS",
 			"TWL",
+			"Twl",
 			"Banner",
-			"TWLBanner1",
+			"TWLBanner",
 			"Mario",
 			"Luigi",
 			"Wario",
@@ -78,8 +80,21 @@ namespace NusRipper
 			"Default",
 			"Title",
 			"Subtitle",
-			"Publisher"
+			"Publisher",
+			"default",
+			"title",
+			"subtitle",
+			"publisher"
 		});
+
+		public static readonly List<string> CommonArticles = new List<string>(new[]
+		{
+			"the",
+			"a",
+			"an"
+		});
+
+		public const string RemoveTrademarkReminders = @"[™®©]";
 
 		public static readonly LanguageCode English    = new LanguageCode("En", "English");
 		public static readonly LanguageCode Japanese   = new LanguageCode("Ja", "Japanese");
@@ -96,8 +111,9 @@ namespace NusRipper
 		public static readonly LanguageCode Chinese    = new LanguageCode("Zh", "Chinese");
 		public static readonly LanguageCode Korean     = new LanguageCode("Ko", "Korean");
 		public static readonly LanguageCode Polish     = new LanguageCode("Pl", "Polish");
+		public static readonly LanguageCode Russian    = new LanguageCode("Ru", "Russian");
 
-		private static readonly Dictionary<string, LanguageCode> IdentifierLanguageDict = new Dictionary<string, LanguageCode>();
+		public static readonly Dictionary<string, LanguageCode> IdentifierLanguageDict = new Dictionary<string, LanguageCode>();
 
 		static Languages()
 		{
@@ -107,8 +123,16 @@ namespace NusRipper
 			IdentifierLanguageDict["de"] = German;
 			IdentifierLanguageDict["es"] = Spanish;
 			IdentifierLanguageDict["it"] = Italian;
+			IdentifierLanguageDict["nl"] = Dutch;
+			IdentifierLanguageDict["pt"] = Portuguese;
+			IdentifierLanguageDict["sv"] = Swedish;
+			IdentifierLanguageDict["no"] = Norwegian;
+			IdentifierLanguageDict["da"] = Danish;
+			IdentifierLanguageDict["fi"] = Finnish;
 			IdentifierLanguageDict["zh"] = Chinese;
 			IdentifierLanguageDict["ko"] = Korean;
+			IdentifierLanguageDict["pl"] = Polish;
+			IdentifierLanguageDict["ru"] = Russian;
 		}
 
 		private const string IdentifierDataPath = "LanguageDefs.xml";
@@ -147,23 +171,31 @@ namespace NusRipper
 			if (string.IsNullOrWhiteSpace(title))
 				return null;
 
-			string sanitizedTitle = Regex.Replace(title, ConfusingCharacters, "");
+			string sanitizedTitle = Regex.Replace(title, ConfusingCharacters, "");    // Filter out confusing characters
 			string[] titleLines = sanitizedTitle.Split('\n');
-			if (titleLines.Length > 1)
+			if (titleLines.Length > 1)                                                // Remove the publisher if necessary
 				sanitizedTitle = string.Join(' ', titleLines.Take(titleLines.Length - 1));
-			sanitizedTitle = string.Join(' ', sanitizedTitle.Split(' ', '　')
+			sanitizedTitle = string.Join(' ',
+				sanitizedTitle.Split(' ', '　')
 				.SelectMany(w => Regex.Split(w, @"(?<!^|[A-Z])(?=[A-Z])")) // Split CamelCase words into individual words
-				.Except(ConfusingProperNouns) // Filter out confusing proper nouns
+				.Except(ConfusingProperNouns)                                         // Filter out confusing proper nouns
 				.Where(w =>
 				{
 					string upperCase = w.ToUpperInvariant();
 					return w != upperCase || (w.Length >= 4 && w == upperCase);
-				})
-				.Select(w =>
-					(w.Length > 1
-						? w[0].ToString().ToUpperInvariant() + w.Substring(1).ToLowerInvariant()
-						: w.ToUpperInvariant()).Trim(TrimChars)));
+				})                                                                    // Remove acronyms
+				.ToTitleCase());                                                      // Title Case words
 			return sanitizedTitle.Trim();
 		}
+
+		[Pure]
+		public static string ToTitleCase(this string str)
+			=> string.Join(' ', str.Split(' ').ToTitleCase());
+
+		[Pure]
+		public static IEnumerable<string> ToTitleCase(this IEnumerable<string> strs)
+			=> strs.Select(str => (str.Length > 1
+				? str[0].ToString().ToUpperInvariant() + str.Substring(1).ToLowerInvariant()
+				: str.ToUpperInvariant()).Trim(TrimChars));
 	}
 }

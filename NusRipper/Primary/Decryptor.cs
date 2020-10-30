@@ -67,7 +67,7 @@ namespace NusRipper
 				}
 			}//);
 
-			Log.Instance.Info($"Completed the batch processing in {stopwatch.Elapsed.ToNiceString()}.");
+			Log.Instance.Info($"Completed the batch processing in {stopwatch.ElapsedAfterStopped().ToNiceString()}.");
 		}
 
 		public static async Task<(TicketBooth.Ticket ticket, List<string> contentsList)> MakeTicketAndDecryptMetadataContents(byte[] titleIdBytes, TitleMetadata metadata, string titleDir, bool makeQolFiles = false)

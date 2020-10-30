@@ -46,7 +46,7 @@ namespace NusRipper
 				await DownloadTitleFile(client, titleDir, lineParts[0], lineParts[1]);
 			});
 
-			Log.Instance.Info($"Completed the download from the list in {stopwatch.Elapsed.ToNiceString()}.");
+			Log.Instance.Info($"Completed the download from the list in {stopwatch.ElapsedAfterStopped().ToNiceString()}.");
 		}
 
 		public static async Task DownloadTitle(HttpClient client, string downloadDir, string titleId, params int[] metadataVersions)

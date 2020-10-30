@@ -5,13 +5,14 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace NusRipper
 {
+	[Serializable]
 	public class RomInfo
 	{
 		private const int GameTitleOffset = 0x00000000;
@@ -69,6 +70,9 @@ namespace NusRipper
 			ChineseIndex = 6,
 			KoreanIndex = 7
 		}
+
+		private const string DefaultTitle = "default title\ndefault subtitle\ndefault publisher";
+		public const char SystemTitleGameCodeChar = 'H'; // 'H' as the first character of the game code typically denotes BIOS or system utilities
 
 		public readonly bool ValidContent;
 
@@ -224,26 +228,49 @@ namespace NusRipper
 			return outImage;
 		}
 
-		public string GetProperName(bool withGameCode = false)
+		[Pure]
+		public string GetProperName(bool withGameCode = false, TitleIndices index = TitleIndices.EnglishIndex)
 		{
 			if (withGameCode)
 			{
-				if (Titles[(int) TitleIndices.EnglishIndex] != null)
-					return $"{GameCode} - {GameTitle} - {GetFriendlyTitle()}";
+				if (Titles[(int) index] != null)
+					return $"{GameCode} - {GameTitle} - {GetFriendlyTitle(index)}";
 				if (GameTitle != null)
 					return $"{GameCode} - {GameTitle}";
 				return GameCode;
 			}
-			if (Titles[(int) TitleIndices.EnglishIndex] != null)
-				return $"{GameTitle} - {GetFriendlyTitle()}";
+			if (Titles[(int) index] != null)
+				return $"{GameTitle} - {GetFriendlyTitle(index)}";
 			return GameTitle;
 		}
 
-		public string GetFriendlyTitle()
-			=> Titles[(int) TitleIndices.EnglishIndex] != null
-				? string.Join(' ', Titles[(int) TitleIndices.EnglishIndex].Split('\n').Select(l => l.Trim(' ', '\0')).ToArray())
+		[Pure]
+		public string GetFriendlyTitle(TitleIndices index = TitleIndices.EnglishIndex)
+		{
+			string title = GetTitleAsNullIfDefault(index);
+			return title != null
+				? string.Join(' ', title.Split('\n').Select(l => l.Trim(' ', '\0')).ToArray())
 				: null;
+		}
 
+		[Pure]
+		public string GetTitleOnly(TitleIndices index = TitleIndices.EnglishIndex)
+		{
+			string title = GetTitleAsNullIfDefault(index);
+			if (title == null)
+				return null;
+			string[] titleParts = title.Split('\n');
+			return string.Join(' ', titleParts
+				.Take(titleParts.Length > 1 ? titleParts.Length - 1 : titleParts.Length)
+				.Select(l => l.Trim(' ', '\0'))
+				.ToArray());
+		}
+
+		[Pure]
+		internal string GetTitleAsNullIfDefault(TitleIndices index = TitleIndices.EnglishIndex)
+			=> !string.Equals(Titles[(int) index], DefaultTitle, StringComparison.InvariantCultureIgnoreCase) ? Titles[(int) index] : null;
+
+		[Pure]
 		private static ushort CalcCrc16Modbus(byte[] bytes)
 		{
 			ushort crc = 0xFFFF;
@@ -267,10 +294,63 @@ namespace NusRipper
 		}
 
 		// If the game code can't be gleaned from the ROM, it can be retrieved from the last 8 characters in a title ID
+		[Pure]
 		public static string DeriveGameCodeFromTitleId(string titleId)
 		{
 			string gameCodeChunk = titleId.Substring(TitleIdLength - GameCodeLength * 2);
 			return new string(Helpers.HexStringToBytes(gameCodeChunk).AsChars());
 		}
+
+		[Pure]
+		internal static TitleIndices LanguageCodeToTitleIndex(Languages.LanguageCode languageCode)
+		{
+			if (languageCode == Languages.Japanese)
+				return TitleIndices.JapaneseIndex;
+			if (languageCode == Languages.English)
+				return TitleIndices.EnglishIndex;
+			if (languageCode == Languages.French)
+				return TitleIndices.FrenchIndex;
+			if (languageCode == Languages.German)
+				return TitleIndices.GermanIndex;
+			if (languageCode == Languages.Italian)
+				return TitleIndices.ItalianIndex;
+			if (languageCode == Languages.Spanish)
+				return TitleIndices.SpanishIndex;
+			if (languageCode == Languages.Chinese)
+				return TitleIndices.ChineseIndex;
+			if (languageCode == Languages.Korean)
+				return TitleIndices.KoreanIndex;
+			return TitleIndices.EnglishIndex;
+		}
+
+		[Pure]
+		internal static Languages.LanguageCode TitleIndexToLanguageCode(TitleIndices index)
+			=> index switch
+			{
+				TitleIndices.JapaneseIndex => Languages.Japanese,
+				TitleIndices.EnglishIndex  => Languages.English,
+				TitleIndices.FrenchIndex   => Languages.French,
+				TitleIndices.GermanIndex   => Languages.German,
+				TitleIndices.ItalianIndex  => Languages.Italian,
+				TitleIndices.SpanishIndex  => Languages.Spanish,
+				TitleIndices.ChineseIndex  => Languages.Chinese,
+				TitleIndices.KoreanIndex   => Languages.Korean,
+				_ => Languages.English
+			};
+
+		[Pure]
+		internal static Languages.LanguageCode TitleIndexToLanguageCode(int index)
+			=> index switch
+			{
+				(int) TitleIndices.JapaneseIndex => Languages.Japanese,
+				(int) TitleIndices.EnglishIndex  => Languages.English,
+				(int) TitleIndices.FrenchIndex   => Languages.French,
+				(int) TitleIndices.GermanIndex   => Languages.German,
+				(int) TitleIndices.ItalianIndex  => Languages.Italian,
+				(int) TitleIndices.SpanishIndex  => Languages.Spanish,
+				(int) TitleIndices.ChineseIndex  => Languages.Chinese,
+				(int) TitleIndices.KoreanIndex   => Languages.Korean,
+				_ => Languages.English
+			};
 	}
 }

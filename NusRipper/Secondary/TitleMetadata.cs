@@ -4,6 +4,7 @@ using System.IO;
 
 namespace NusRipper
 {
+	[Serializable]
 	public class TitleMetadata
 	{
 		private const int TitleVersionOffset = 0x000001DC;
@@ -11,6 +12,7 @@ namespace NusRipper
 		private const int ContentsListOffset = 0x000001E4;
 		private const int BytesPerContentChunk = 36;
 
+		[Serializable]
 		public class TitleContentInfo
 		{
 			public readonly uint Id;
