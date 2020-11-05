@@ -91,7 +91,7 @@ namespace NusRipper
 			{
 				try
 				{
-					HttpResponseMessage response = client.GetAsync(downloadUrl/*, HttpCompletionOption.ResponseHeadersRead*/).Result;
+					using HttpResponseMessage response = client.GetAsync(downloadUrl/*, HttpCompletionOption.ResponseHeadersRead*/).Result;
 					//HttpResponseMessage response = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).Result;
 
 					if (!response.IsSuccessStatusCode)

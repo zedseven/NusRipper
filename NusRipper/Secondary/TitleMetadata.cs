@@ -30,7 +30,7 @@ namespace NusRipper
 		}
 
 		public readonly string FileName;
-		public readonly short TitleVersion;
+		public readonly ushort TitleVersion;
 		public readonly short NumContents;
 		public readonly TitleContentInfo[] ContentInfo;
 
@@ -42,7 +42,7 @@ namespace NusRipper
 			string[] fileNamePieces = fileName.Split('.');
 			if (fileNamePieces.Length != 2)
 				return;
-			short.TryParse(fileNamePieces[1], out TitleVersion);
+			ushort.TryParse(fileNamePieces[1], out TitleVersion);
 		}
 
 		public TitleMetadata(string metadataPath)
@@ -51,7 +51,7 @@ namespace NusRipper
 
 			byte[] bytes = File.ReadAllBytes(metadataPath);
 
-			TitleVersion = BitConverter.ToInt16(bytes.Slice(TitleVersionOffset, 2, true));
+			TitleVersion = BitConverter.ToUInt16(bytes.Slice(TitleVersionOffset, 2, true));
 			NumContents = BitConverter.ToInt16(bytes.Slice(NumContentsOffset, 2, true));
 			List<TitleContentInfo> contentInfo = new List<TitleContentInfo>();
 			for (int i = 0; i < NumContents; i++)
@@ -63,5 +63,17 @@ namespace NusRipper
 
 			ContentInfo = contentInfo.ToArray();
 		}
+
+		// https://www.3dbrew.org/wiki/Titles#Versions
+		public static string VersionToHumanReadable(ushort version)
+		{
+			byte major = (byte) ((version & 0b1111110000000000) >> 10);
+			byte minor = (byte) ((version & 0b0000001111110000) >> 4);
+			byte micro = (byte)  (version & 0b0000000000001111);
+			return $"v{major}.{minor}.{micro}";
+		}
+
+		public static string VersionToHumanReadable(string version)
+			=> VersionToHumanReadable(ushort.Parse(version.Trim()));
 	}
 }

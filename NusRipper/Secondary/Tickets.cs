@@ -10,6 +10,7 @@ namespace NusRipper
 	{
 		public const string DecryptedContentExtension = "app";
 		private const int TitleKeyOffset = 0x000001BF;
+		private const int VersionOffset = 0x000001E6;
 
 		public class Ticket
 		{
@@ -69,5 +70,10 @@ namespace NusRipper
 				return decPath;
 			}
 		}
+
+		public static ushort GetTicketVersion(string ticketPath)
+			=> BitConverter.ToUInt16(
+				File.ReadAllBytes(ticketPath)
+					.Slice(VersionOffset, 2, true));
 	}
 }

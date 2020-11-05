@@ -76,7 +76,9 @@ namespace NusRipper
 
 		public readonly bool ValidContent;
 
+		[NonSerialized]
 		public readonly Image<Rgba32> StaticIcon;
+		[NonSerialized]
 		public readonly Image<Rgba32> AnimatedIcon;
 
 		public RomInfo(string decPath, bool parseImages = false)
@@ -103,7 +105,7 @@ namespace NusRipper
 			if (titleInfoAddress == 0x00000000)
 				return;
 
-			TitleInfoVersion = (TitleInfoVersions)BitConverter.ToInt16(contentBytes.Slice(titleInfoAddress, 2, true).Reverse().ToArray());
+			TitleInfoVersion = (TitleInfoVersions) BitConverter.ToInt16(contentBytes.Slice(titleInfoAddress, 2, true).Reverse().ToArray());
 
 			UnicodeEncoding encoding = new UnicodeEncoding(false, false);
 			int titleCount = TitleInfoVersion == TitleInfoVersions.Original ? 6 : TitleInfoVersion == TitleInfoVersions.ChineseTitle ? 7 : 8;
@@ -302,55 +304,55 @@ namespace NusRipper
 		}
 
 		[Pure]
-		internal static TitleIndices LanguageCodeToTitleIndex(Languages.LanguageCode languageCode)
+		internal static TitleIndices LanguageCodeToTitleIndex(Language.LanguageCodes languageCode)
 		{
-			if (languageCode == Languages.Japanese)
+			if (languageCode == Language.LanguageCodes.Ja)
 				return TitleIndices.JapaneseIndex;
-			if (languageCode == Languages.English)
+			if (languageCode == Language.LanguageCodes.En)
 				return TitleIndices.EnglishIndex;
-			if (languageCode == Languages.French)
+			if (languageCode == Language.LanguageCodes.Fr)
 				return TitleIndices.FrenchIndex;
-			if (languageCode == Languages.German)
+			if (languageCode == Language.LanguageCodes.De)
 				return TitleIndices.GermanIndex;
-			if (languageCode == Languages.Italian)
+			if (languageCode == Language.LanguageCodes.It)
 				return TitleIndices.ItalianIndex;
-			if (languageCode == Languages.Spanish)
+			if (languageCode == Language.LanguageCodes.Es)
 				return TitleIndices.SpanishIndex;
-			if (languageCode == Languages.Chinese)
+			if (languageCode == Language.LanguageCodes.Zh)
 				return TitleIndices.ChineseIndex;
-			if (languageCode == Languages.Korean)
+			if (languageCode == Language.LanguageCodes.Ko)
 				return TitleIndices.KoreanIndex;
 			return TitleIndices.EnglishIndex;
 		}
 
 		[Pure]
-		internal static Languages.LanguageCode TitleIndexToLanguageCode(TitleIndices index)
+		internal static Language.LanguageCodes TitleIndexToLanguageCode(TitleIndices index)
 			=> index switch
 			{
-				TitleIndices.JapaneseIndex => Languages.Japanese,
-				TitleIndices.EnglishIndex  => Languages.English,
-				TitleIndices.FrenchIndex   => Languages.French,
-				TitleIndices.GermanIndex   => Languages.German,
-				TitleIndices.ItalianIndex  => Languages.Italian,
-				TitleIndices.SpanishIndex  => Languages.Spanish,
-				TitleIndices.ChineseIndex  => Languages.Chinese,
-				TitleIndices.KoreanIndex   => Languages.Korean,
-				_ => Languages.English
+				TitleIndices.JapaneseIndex => Language.LanguageCodes.Ja,
+				TitleIndices.EnglishIndex  => Language.LanguageCodes.En,
+				TitleIndices.FrenchIndex   => Language.LanguageCodes.Fr,
+				TitleIndices.GermanIndex   => Language.LanguageCodes.De,
+				TitleIndices.ItalianIndex  => Language.LanguageCodes.It,
+				TitleIndices.SpanishIndex  => Language.LanguageCodes.Es,
+				TitleIndices.ChineseIndex  => Language.LanguageCodes.Zh,
+				TitleIndices.KoreanIndex   => Language.LanguageCodes.Ko,
+				_ => Language.LanguageCodes.En
 			};
 
 		[Pure]
-		internal static Languages.LanguageCode TitleIndexToLanguageCode(int index)
+		internal static Language.LanguageCodes TitleIndexToLanguageCode(int index)
 			=> index switch
 			{
-				(int) TitleIndices.JapaneseIndex => Languages.Japanese,
-				(int) TitleIndices.EnglishIndex  => Languages.English,
-				(int) TitleIndices.FrenchIndex   => Languages.French,
-				(int) TitleIndices.GermanIndex   => Languages.German,
-				(int) TitleIndices.ItalianIndex  => Languages.Italian,
-				(int) TitleIndices.SpanishIndex  => Languages.Spanish,
-				(int) TitleIndices.ChineseIndex  => Languages.Chinese,
-				(int) TitleIndices.KoreanIndex   => Languages.Korean,
-				_ => Languages.English
+				(int) TitleIndices.JapaneseIndex => Language.LanguageCodes.Ja,
+				(int) TitleIndices.EnglishIndex  => Language.LanguageCodes.En,
+				(int) TitleIndices.FrenchIndex   => Language.LanguageCodes.Fr,
+				(int) TitleIndices.GermanIndex   => Language.LanguageCodes.De,
+				(int) TitleIndices.ItalianIndex  => Language.LanguageCodes.It,
+				(int) TitleIndices.SpanishIndex  => Language.LanguageCodes.Es,
+				(int) TitleIndices.ChineseIndex  => Language.LanguageCodes.Zh,
+				(int) TitleIndices.KoreanIndex   => Language.LanguageCodes.Ko,
+				_ => Language.LanguageCodes.En
 			};
 	}
 }

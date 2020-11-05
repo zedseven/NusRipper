@@ -24,13 +24,25 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="LanguageDefs.xml">
+    <None Update="ReferenceFiles\GalaxyDatFiles.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="ReferenceFiles\GalaxyFileDates.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="ReferenceFiles\GalaxyMismatchedTickets.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="ReferenceFiles\LanguageDefs.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="NLog.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="ReferenceFiles\DSi23DS.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="ReferenceFiles\LarsenDatFiles.csv">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

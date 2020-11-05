@@ -15,7 +15,7 @@ namespace NusRipper
 			private const string Sha256Label = "SHA256";
 
 			// File Info
-			public readonly long FileSize;
+			public readonly long? FileSize;
 
 			// Hashes
 			public readonly uint Crc32Hash;
@@ -45,7 +45,7 @@ namespace NusRipper
 				Sha256String = Sha256Hash.ToHexString();
 			}
 
-			public FileHashCollection(long fileSize, string crc32, string md5, string sha1, string sha256)
+			public FileHashCollection(long? fileSize, string crc32, string md5, string sha1, string sha256)
 			{
 				FileSize = fileSize;
 				Crc32String = crc32;

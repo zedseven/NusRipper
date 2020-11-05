@@ -77,6 +77,79 @@ namespace NusRipper
 		public static char[] AsChars(this byte[] bytes)
 			=> bytes.Select(b => (char) b).ToArray();
 
+		public static void Replace<T>(this IList<T> collection, int index, T item)
+		{
+			collection.RemoveAt(index);
+			collection.Insert(index, item);
+		}
+
+		// CSV Stuff
+		public static bool LoadCsvIntoDictionary(string path, IDictionary<string, string> dict)
+		{
+			using FileStream stream = File.OpenRead(path);
+
+			if (!stream.CanRead)
+				return false;
+
+			try
+			{
+				using StreamReader reader = new StreamReader(stream);
+
+				// Discard the first line, since it's simply the heading
+				_ = reader.ReadLine();
+
+				while (!reader.EndOfStream)
+				{
+					string line = reader.ReadLine();
+					if (string.IsNullOrWhiteSpace(line) || line[0] == '#')
+						continue;
+
+					int commaIndex = line.IndexOf(',');
+
+					dict[line.Substring(0, commaIndex)] = line.Substring(commaIndex + 1);
+				}
+			}
+			catch (Exception e)
+			{
+				return false;
+			}
+
+			return true;
+		}
+
+		public static bool LoadCsvIntoDictionary<TKey, TVal>(string path, IDictionary<TKey, TVal> dict, Func<string, TKey> keyMapper, Func<string, TVal> valueMapper)
+		{
+			using FileStream stream = File.OpenRead(path);
+
+			if (!stream.CanRead)
+				return false;
+
+			try
+			{
+				using StreamReader reader = new StreamReader(stream);
+
+				// Discard the first line, since it's simply the heading
+				_ = reader.ReadLine();
+
+				while (!reader.EndOfStream)
+				{
+					string line = reader.ReadLine();
+					if (string.IsNullOrWhiteSpace(line) || line[0] == '#')
+						continue;
+
+					int commaIndex = line.IndexOf(',');
+
+					dict[keyMapper(line.Substring(0, commaIndex))] = valueMapper(line.Substring(commaIndex + 1));
+				}
+			}
+			catch (Exception e)
+			{
+				return false;
+			}
+
+			return true;
+		}
+
 		// XML Stuff
 		public static async Task WriteAttributeAsync(this XmlWriter writer, string name, string value)
 		{

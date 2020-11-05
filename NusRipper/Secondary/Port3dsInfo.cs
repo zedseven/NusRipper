@@ -17,7 +17,7 @@ namespace NusRipper
 		static Port3dsInfo()
 		{
 			// Load DSi -> 3DS Title ID Map
-			LoadCsvIntoDictionary(Path.Combine(Constants.ReferenceFilesPath, "DSi23DS.csv"), DsiTo3dsTitleIds);
+			Helpers.LoadCsvIntoDictionary(Path.Combine(Constants.ReferenceFilesPath, "DSi23DS.csv"), DsiTo3dsTitleIds);
 
 			// Load Certificates
 			X509Store keystore = new X509Store(StoreName.My, StoreLocation.LocalMachine);
@@ -30,7 +30,7 @@ namespace NusRipper
 		public static bool Has3dsPort(string titleIdDsi)
 			=> DsiTo3dsTitleIds.ContainsKey(titleIdDsi);
 
-		public static async Task<Languages.LanguageCode[]> GetTitle3dsInfo(string titleIdDsi, string twoLetterRegion)
+		public static async Task<Language.LanguageCodes[]> GetTitle3dsInfo(string titleIdDsi, string twoLetterRegion)
 		{
 			if (string.IsNullOrWhiteSpace(titleIdDsi) || !DsiTo3dsTitleIds.TryGetValue(titleIdDsi, out string titleId3ds))
 				return null;
@@ -49,7 +49,7 @@ namespace NusRipper
 			}
 			catch (WebException e)
 			{
-				Log.Instance.Error($"Title '{titleIdDsi}' ('{titleId3ds}' on 3DS) received an error when connecting to samurai at URL \"{ninjaUrl}\": {e.Message}");
+				Log.Instance.Error($"Title '{titleIdDsi}' ('{titleId3ds}' on 3DS) received an error when connecting to ninja at URL \"{ninjaUrl}\": {e.Message}");
 				return null;
 			}
 			Stream ninjaResponseStream = ninjaResponse.GetResponseStream();
@@ -99,7 +99,7 @@ namespace NusRipper
 
 			string name = null;
 			string formalName = null;
-			List<Languages.LanguageCode> languages = new List<Languages.LanguageCode>();
+			List<Language.LanguageCodes> languages = new List<Language.LanguageCodes>();
 			using (XmlReader samuraiReader = XmlReader.Create(samuraiResponseStream, new XmlReaderSettings { Async = true }))
 			{
 				while (await samuraiReader.ReadAsync())
@@ -116,7 +116,7 @@ namespace NusRipper
 
 						if (samuraiReader.Name == "iso_code")
 							languages.Add(
-								Languages.IdentifierLanguageDict[
+								Language.IdentifierLanguageDict[
 									samuraiReader.ReadElementContentAsString().ToLowerInvariant()]);
 					}
 				}
@@ -126,40 +126,6 @@ namespace NusRipper
 				Log.Instance.Warn($"The title '{titleIdDsi}' ('{titleId3ds}' on 3DS) has no listed languages according to samurai at the following URL: \"{samuraiUrl}\".");
 
 			return languages.Distinct().ToArray();
-		}
-
-		// Helper Functions
-		private static bool LoadCsvIntoDictionary(string path, IDictionary<string, string> dict)
-		{
-			using FileStream stream = File.OpenRead(path);
-
-			if (!stream.CanRead)
-				return false;
-
-			try
-			{
-				using StreamReader reader = new StreamReader(stream);
-
-				// Discard the first line, since it's simply the heading
-				_ = reader.ReadLine();
-
-				while (!reader.EndOfStream)
-				{
-					string line = reader.ReadLine();
-					if (string.IsNullOrWhiteSpace(line) || line[0] == '#')
-						continue;
-
-					int commaIndex = line.IndexOf(',');
-
-					dict[line.Substring(0, commaIndex)] = line.Substring(commaIndex + 1);
-				}
-			}
-			catch (Exception e)
-			{
-				return false;
-			}
-
-			return true;
 		}
 	}
 }
