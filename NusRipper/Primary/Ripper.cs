@@ -85,6 +85,13 @@ namespace NusRipper
 			string headerDownloadPath = Path.Combine(downloadDir, $"{file}{HeaderFileSuffix}");
 			string hashesDownloadPath = Path.Combine(downloadDir, $"{file}{HashesFileSuffix}");
 
+			// Don't re-download files already existing
+			if (File.Exists(fileDownloadPath))
+			{
+				Log.Instance.Info($"File '{fileDownloadPath}' already exists - not re-downloading.");
+				return fileDownloadPath;
+			}
+
 			//Log.Instance.Trace($"Threads in use: {Process.GetCurrentProcess().Threads.Count}");
 			//HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, downloadUrl) {Headers = { ConnectionClose = true }};
 			for(int i = 0; i < MaxDownloadAttempts; i++)

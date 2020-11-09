@@ -660,26 +660,41 @@ namespace NusRipper
 								hashesDec,
 								modTimeDec,
 								versionStr,
-								serialStr));
+								serialStr,
+								contentFileEntry.Key));
 						}
 
 						// Source entries for each dumper involved in the project, to capture their work and give them appropriate credit
 						// it's a bit of a mess, but this was the cleanest way to do it without an exorbitant amount of extra work
 						foreach (DumperNames dumperName in Enum.GetValues(typeof(DumperNames)))
 						{
+							List<RomEntry> ungroupedEntries = new List<RomEntry>();
 							List<(string, List<RomEntry>)> dumperEntries = new List<(string, List<RomEntry>)>();
 
 							switch (dumperName)
 							{
 								case DumperNames.zedseven:
+									ungroupedEntries = romEntries.Where(e => !titleInfo.Deleted || !e.Encrypted).ToList();
+
 									dumperEntries.Add((File.GetLastWriteTime(Path.Combine(titleInfo.TitleDir,
 												titleInfo.MetadataFiles[titleInfo.NewestMetadataIndex].fileName))
 											.ToString("yyyy-MM-dd"),
-										romEntries.Where(e =>
-											!titleInfo.Deleted || !e.Encrypted).ToList()));
+										));
+
+									dumperEntries.AddRange(
+										ungroupedEntries
+											.GroupBy(e =>
+											{
+												if (GalaxyFileDates.TryGetValue((titleInfo.TitleIdLower, e.FileName),
+													out DateTime dumpDate))
+													return (DateTime?)dumpDate.Date;
+												return null;
+											})
+											.OrderBy(g => g.Key ?? DateTime.MaxValue)
+											.Select(g => (g.Key?.ToString("yyyy-MM-dd"), g.ToList())));
 									break;
 								case DumperNames.Galaxy:
-									List<RomEntry> ungroupedEntries = romEntries.Where(e =>
+									ungroupedEntries = romEntries.Where(e =>
 										e.Encrypted &&
 										DatFilesSetGalaxy.Contains((titleInfo.TitleIdLower, e.FileName))).ToList();
 
@@ -891,9 +906,9 @@ namespace NusRipper
 
 			title = Regex.Replace(Regex.Replace(title,
 							Language.RemoveTrademarkReminders, "") // Remove Trademark Reminders
-						.FoldToAscii(),                             // Convert to Low ASCII
-					RemoveNoIntroDisallowedChars, "")               // Remove additional Low ASCII characters that are not allowed
-				.Trim(' ', ':', '-');                               // Remove sub title separation characters and spaces
+						.FoldToAscii(),                            // Convert to Low ASCII
+					RemoveNoIntroDisallowedChars, "")              // Remove additional Low ASCII characters that are not allowed
+				.Trim(' ', ':', '-');                              // Remove sub title separation characters and spaces
 
 			// Move common articles at the beginning of the title to the end (ie. "The Legend of Zelda" to "Legend of Zelda, The")
 			foreach (string commonArticle in Language.CommonArticles)
@@ -911,9 +926,9 @@ namespace NusRipper
 			{
 				subTitle = Regex.Replace(Regex.Replace(subTitle,
 								Language.RemoveTrademarkReminders, "") // Remove Trademark Reminders
-							.FoldToAscii(),                             // Convert to Low ASCII
-						RemoveNoIntroDisallowedChars, "")               // Remove additional Low ASCII characters that are not allowed
-					.Trim(' ', ':', '-');                               // Remove sub title separation characters and spaces
+							.FoldToAscii(),                            // Convert to Low ASCII
+						RemoveNoIntroDisallowedChars, "")              // Remove additional Low ASCII characters that are not allowed
+					.Trim(' ', ':', '-');                              // Remove sub title separation characters and spaces
 
 				retTitle.Append($" - {subTitle}");
 			}
@@ -924,7 +939,7 @@ namespace NusRipper
 
 		private static async Task WriteCsvRow(TextWriter writer, params string[] values)
 			=> await writer.WriteLineAsync(string.Join(',',
-				values.Select(v => v != null ? v.Contains(',') ? @"""" + v.Replace(@"""", @"""""") + @"""" : v : "")));
+				values.Select(v => v != null ? v.Contains(',') ? @"""" + v.Replace(@"""", @"""""") + @"""" : v.Replace(@"""", @"""""") : "")));
 
 		private static bool LoadCsvIntoDatFileList(string path, HashSet<(string, string)> set)
 		{
