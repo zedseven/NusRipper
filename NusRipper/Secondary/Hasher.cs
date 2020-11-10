@@ -34,7 +34,8 @@ namespace NusRipper
 				byte[] bytes = File.ReadAllBytes(filePath);
 
 				FileSize = bytes.LongLength;
-				Crc32Hash = Crc32.ComputeChecksum(bytes);
+				if (FileSize > 0)
+					Crc32Hash = Crc32.ComputeChecksum(bytes);
 				Md5Hash = MD5.Create().ComputeHash(bytes);
 				Sha1Hash = SHA1.Create().ComputeHash(bytes);
 				Sha256Hash = SHA256.Create().ComputeHash(bytes);

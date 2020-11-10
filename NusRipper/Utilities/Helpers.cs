@@ -83,6 +83,18 @@ namespace NusRipper
 			collection.Insert(index, item);
 		}
 
+		[Pure]
+		public static bool StartsWith<T>(this IList<T> collection, IList<T> startCollection)
+		where T : IEquatable<T>
+		{
+			if (collection.Count < startCollection.Count)
+				return false;
+			for (int i = 0; i < startCollection.Count; i++)
+				if (!collection[i].Equals(startCollection[i]))
+					return false;
+			return true;
+		}
+
 		// CSV Stuff
 		public static bool LoadCsvIntoDictionary(string path, IDictionary<string, string> dict)
 		{

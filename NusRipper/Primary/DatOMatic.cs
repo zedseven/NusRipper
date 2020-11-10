@@ -24,6 +24,15 @@ namespace NusRipper
 		private const int StartingArchiveId = 1; // The dat should be the establishing set, so it can start at 0001
 		private const string SerializationDatFile = "allTitleInfo.dat";
 
+		private const string TicketExtension        = "tik";
+		private const string MetadataExtension      = "tmd";
+		private const string BinaryExtension        = "bin";
+		private const string EncryptedExtension     = "bin"; //"cxi";
+		private const string DecryptedGameExtension = "nds";
+
+		private const string MainContentItemName = "Main Content";
+		private const string MiscContentItemName = "Miscellaneous Content";
+
 		// I've tried really hard to keep the functions of this tool generic and largely system-agnostic, but unfortunately I had to do it this way
 		// ReSharper disable twice IdentifierTypo
 		// ReSharper disable twice InconsistentNaming
@@ -120,10 +129,11 @@ namespace NusRipper
 			public bool Found3dsPort;
 
 			// Title File Info
-			public List<(string, ushort)> TicketFiles = new List<(string, ushort)>();
+			public List<(string fileName, ushort version)> TicketFiles = new List<(string fileName, ushort version)>();
 			public List<(string fileName, TitleMetadata metadata)> MetadataFiles = new List<(string fileName, TitleMetadata metadata)>();
 			public List<string> ContentEncryptedFiles = new List<string>();
 			public Dictionary<string, (string fileName, RomInfo info, int metadataIndex)> ContentDecryptedFiles = new Dictionary<string, (string fileName, RomInfo info, int metadataIndex)>();
+			public List<(string fileName, string extension)> MiscellaneousFiles = new List<(string fileName, string extension)>();
 
 			// Working Variables
 			public string TitleDir;
@@ -137,13 +147,15 @@ namespace NusRipper
 			{
 				Ticket,
 				Metadata,
-				Content
+				Content,
+				Miscellaneous
 			}
 
 			public readonly EntryTypes Type;
 			public readonly bool Encrypted;
 			public readonly string FileName;
 			public readonly string DisplayName;
+			public readonly string Extension;
 			public readonly Hasher.FileHashCollection Hashes;
 			public readonly DateTime? ModTime;
 			public readonly string VersionStr;
@@ -153,6 +165,7 @@ namespace NusRipper
 			public RomEntry(EntryTypes type,
 				bool encrypted,
 				string fileName,
+				string extension,
 				Hasher.FileHashCollection hashes,
 				DateTime? modTime = null,
 				string versionStr = null,
@@ -164,6 +177,7 @@ namespace NusRipper
 				Encrypted = encrypted;
 				FileName = fileName;
 				DisplayName = displayName;
+				Extension = extension;
 				Hashes = hashes;
 				ModTime = modTime;
 				VersionStr = versionStr;
@@ -232,6 +246,21 @@ namespace NusRipper
 							titleInfo.ContentDecryptedFiles.Add(fileName.Split('.')[0], (fileName, new RomInfo(filePath), -1));
 							continue;
 						}
+						if (Constants.MiscellaneousFileRegex.IsMatch(fileName))
+						{
+							string extension;
+							if (Constants.MetadataIdFileRegex.IsMatch(fileName))
+								extension = MetadataExtension;
+							else if (fileName == Ripper.TicketIdFileName)
+								extension = TicketExtension;
+							else if (new FileInfo(filePath)?.Length > 0)
+								extension = await Images.DetermineImageFileExtension(Path.Combine(titleInfo.TitleDir, fileName));
+							else
+								extension = BinaryExtension;
+
+							titleInfo.MiscellaneousFiles.Add((fileName, extension));
+							continue;
+						}
 					}
 
 					// Check for empty/malformed folders
@@ -269,7 +298,7 @@ namespace NusRipper
 							}
 							for (int j = 0; j < titleInfo.MetadataFiles[i].metadata.ContentInfo.Length; j++)
 							{
-								string contentName = titleInfo.MetadataFiles[i].metadata.ContentInfo[j].Id.ToString("x8");
+								string contentName = titleInfo.MetadataFiles[i].metadata.ContentInfo[j].Id.ToString("X8");
 								if (titleInfo.ContentDecryptedFiles.ContainsKey(contentName))
 									titleInfo.ContentDecryptedFiles[contentName] = (
 										titleInfo.ContentDecryptedFiles[contentName].fileName,
@@ -280,7 +309,7 @@ namespace NusRipper
 							}
 						}
 					}
-					titleInfo.NewestContentId = titleInfo.MetadataFiles[titleInfo.NewestMetadataIndex].metadata.ContentInfo[0].Id.ToString("x8");
+					titleInfo.NewestContentId = titleInfo.MetadataFiles[titleInfo.NewestMetadataIndex].metadata.ContentInfo[0].Id.ToString("X8");
 
 					// Ensure the number of encrypted titles matches the number of decrypted ones (more of a sanity check than anything)
 					if (titleInfo.ContentEncryptedFiles.Count != titleInfo.ContentDecryptedFiles.Count)
@@ -508,6 +537,7 @@ namespace NusRipper
 						return new RomEntry(RomEntry.EntryTypes.Ticket,
 							true,
 							Ripper.TicketFileName,
+							TicketExtension,
 							new Hasher.FileHashCollection(null, hashes[0], hashes[1], hashes[2], null),
 							null,
 							null,
@@ -589,28 +619,32 @@ namespace NusRipper
 						// Build a list of all ROM entries to write
 						List<RomEntry> romEntries = new List<RomEntry>();
 
-						foreach ((string ticketFile, ushort version) in titleInfo.TicketFiles)
+						// Ticket files
+						foreach ((string fileName, ushort version) in titleInfo.TicketFiles)
 						{
-							(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(Path.Combine(titleInfo.TitleDir, ticketFile));
-							string displayName = $"{ticketFile}.{version}";
+							(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(Path.Combine(titleInfo.TitleDir, fileName));
+							string displayName = $"{fileName}.{version}";
 							string versionStr = $"{version},{TitleMetadata.VersionToHumanReadable(version)}";
 							
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Ticket,
 								true,
-								ticketFile,
+								fileName,
+								TicketExtension,
 								hashes,
 								modTime,
 								versionStr,
 								displayName: displayName));
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Ticket,
 								false,
-								ticketFile,
+								fileName,
+								TicketExtension,
 								hashes,
 								modTime,
 								versionStr,
 								displayName: displayName));
 						}
 
+						// Metadata files
 						foreach ((string fileName, TitleMetadata metadata) metadata in titleInfo.MetadataFiles)
 						{
 							(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(Path.Combine(titleInfo.TitleDir, metadata.fileName));
@@ -619,17 +653,20 @@ namespace NusRipper
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Metadata,
 								true,
 								metadata.fileName,
+								MetadataExtension,
 								hashes,
 								modTime,
 								versionStr));
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Metadata,
 								false,
 								metadata.fileName,
+								MetadataExtension,
 								hashes,
 								modTime,
 								versionStr));
 						}
 
+						// Content files
 						foreach (KeyValuePair<string, (string fileName, RomInfo info, int metadataIndex)> contentFileEntry in titleInfo.ContentDecryptedFiles)
 						{
 							List<string> serialParts = new List<string>();
@@ -647,6 +684,7 @@ namespace NusRipper
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Content,
 								true,
 								contentFileEntry.Key,
+								EncryptedExtension,
 								hashesEnc,
 								modTimeEnc,
 								versionStr,
@@ -656,7 +694,8 @@ namespace NusRipper
 							DateTime modTimeDec = File.GetLastWriteTime(Path.Combine(titleInfo.TitleDir, contentFileEntry.Value.fileName));
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Content,
 								false,
-								contentFileEntry.Key,
+								contentFileEntry.Value.fileName,
+								contentFileEntry.Value.info.ValidContent ? DecryptedGameExtension : BinaryExtension,
 								hashesDec,
 								modTimeDec,
 								versionStr,
@@ -664,46 +703,59 @@ namespace NusRipper
 								contentFileEntry.Key));
 						}
 
+						// Miscellaneous files (screenshots, icons, the mysterious always-empty file, etc.)
+						foreach ((string fileName, string extension) in titleInfo.MiscellaneousFiles)
+						{
+							(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(Path.Combine(titleInfo.TitleDir, fileName));
+
+							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Miscellaneous,
+								true,
+								fileName,
+								extension,
+								hashes,
+								modTime,
+								specificDumper: DumperNames.zedseven));
+						}
+
 						// Source entries for each dumper involved in the project, to capture their work and give them appropriate credit
 						// it's a bit of a mess, but this was the cleanest way to do it without an exorbitant amount of extra work
 						foreach (DumperNames dumperName in Enum.GetValues(typeof(DumperNames)))
 						{
-							List<RomEntry> ungroupedEntries = new List<RomEntry>();
 							List<(string, List<RomEntry>)> dumperEntries = new List<(string, List<RomEntry>)>();
 
 							switch (dumperName)
 							{
 								case DumperNames.zedseven:
-									ungroupedEntries = romEntries.Where(e => !titleInfo.Deleted || !e.Encrypted).ToList();
-
-									dumperEntries.Add((File.GetLastWriteTime(Path.Combine(titleInfo.TitleDir,
-												titleInfo.MetadataFiles[titleInfo.NewestMetadataIndex].fileName))
-											.ToString("yyyy-MM-dd"),
-										));
-
 									dumperEntries.AddRange(
-										ungroupedEntries
+										romEntries
+											.Where(e => !titleInfo.Deleted || !e.Encrypted || e.SpecificDumper == DumperNames.zedseven)
 											.GroupBy(e =>
 											{
-												if (GalaxyFileDates.TryGetValue((titleInfo.TitleIdLower, e.FileName),
-													out DateTime dumpDate))
-													return (DateTime?)dumpDate.Date;
-												return null;
+												try
+												{
+													return (DateTime?) File.GetLastWriteTime(Path.Combine(titleInfo.TitleDir,
+														e.FileName)).Date;
+												}
+												catch (Exception)
+												{
+													return null;
+												}
 											})
 											.OrderBy(g => g.Key ?? DateTime.MaxValue)
 											.Select(g => (g.Key?.ToString("yyyy-MM-dd"), g.ToList())));
 									break;
 								case DumperNames.Galaxy:
-									ungroupedEntries = romEntries.Where(e =>
+									List<RomEntry> ungroupedEntries = romEntries.Where(e =>
 										e.Encrypted &&
-										DatFilesSetGalaxy.Contains((titleInfo.TitleIdLower, e.FileName))).ToList();
+										DatFilesSetGalaxy.Contains((titleInfo.TitleIdLower, e.FileName)) ||
+										e.SpecificDumper == DumperNames.Galaxy).ToList();
 
 									// Swap out tickets for the Galaxy-specific hashes if necessary
 									if (GalaxyMismatchedTickets.TryGetValue(titleInfo.TitleIdLower, out RomEntry mismatchedTicketEntry))
 									{
 										int ticketIndex = -1;
 										for (int j = 0; j < ungroupedEntries.Count; j++)
-											if (ungroupedEntries[j].FileName == mismatchedTicketEntry.FileName &&
+											if (ungroupedEntries[j].FileName  == mismatchedTicketEntry.FileName &&
 											    ungroupedEntries[j].Encrypted == mismatchedTicketEntry.Encrypted)
 											{
 												ticketIndex = j;
@@ -731,7 +783,8 @@ namespace NusRipper
 									dumperEntries.Add(("2018-11-17",
 										romEntries.Where(e =>
 												e.Encrypted &&
-												DatFilesSetLarsen.Contains((titleInfo.TitleIdLower, e.FileName)))
+												DatFilesSetLarsen.Contains((titleInfo.TitleIdLower, e.FileName)) ||
+												e.SpecificDumper == DumperNames.Larsenv)
 											.ToList()));
 									break;
 							}
@@ -854,8 +907,8 @@ namespace NusRipper
 			writer.WriteStartElement("rom");
 			await writer.WriteAttributeAsync("dirname",   "");
 			await writer.WriteAttributeAsync("forcename", entry.DisplayName ?? entry.FileName);
-			await writer.WriteAttributeAsync("extension", "");
-			await writer.WriteAttributeAsync("item",      "");
+			await writer.WriteAttributeAsync("extension", entry.Extension);
+			await writer.WriteAttributeAsync("item",      entry.Type != RomEntry.EntryTypes.Miscellaneous ? MainContentItemName : MiscContentItemName);
 			await writer.WriteAttributeAsync("date",      entry.ModTime?.ToString("yyyy-MM-dd"));
 			await writer.WriteAttributeAsync("format",    entry.Encrypted ? "CDN" : "CDNdec");
 			await writer.WriteAttributeAsync("version",   entry.VersionStr);

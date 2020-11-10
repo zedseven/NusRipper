@@ -17,13 +17,20 @@ namespace NusRipper
 
 		public static bool DownloadSuffixlessMetadata = false;
 
-		public const string TicketFileName = "cetk";
-		public const string MetadataFileName = "tmd";
+		public const string TicketFileName             = "cetk";
+		public const string MetadataFileName           = "tmd";
+		public static readonly string TicketIdFileName = TicketContentIndex.ToString("X8");
 
 		public const string HeaderFileSuffix = ".headers.txt";
 		public const string HashesFileSuffix = ".checks.txt";
 
 		private const int MaxDownloadAttempts = 5;
+
+		// CDN Special Content IDs
+		private const uint ShopDataStartIndex = 0xfffd0000;
+		private const uint TicketContentIndex = 0xfffffffd;
+		private const uint EmptyContentIndex  = 0xfffffffe;
+		private const uint MetadataStartIndex = 0xfffeffff;
 
 		internal static async Task DownloadFromList(string listPath, string downloadDir, int maxThreads = 8)
 		{
@@ -34,7 +41,7 @@ namespace NusRipper
 			Log.Instance.Info($"Beginning download from the list '{listPath}' with {(maxThreads > -1 ? maxThreads.ToString() : "unlimited")} max thread{(maxThreads != 1 ? "s" : "")}.");
 			
 			string[] listLines = await File.ReadAllLinesAsync(listPath);
-			HttpClient client = new HttpClient();
+			using HttpClient client = new HttpClient();
 			Parallel.ForEach(listLines, new ParallelOptions { MaxDegreeOfParallelism = maxThreads }, async line =>
 			{
 				string[] lineParts = line.Split(' ').Select(l => l.Trim()).ToArray();
@@ -73,11 +80,11 @@ namespace NusRipper
 				// Parse out the content IDs from the metadata file, and download them
 				TitleMetadata metadata = new TitleMetadata(metadataPath);
 				for (int i = 0; i < metadata.NumContents; i++)
-					await DownloadTitleFile(client, metadataDir, titleId, metadata.ContentInfo[i].Id.ToString("x8"));
+					await DownloadTitleFile(client, metadataDir, titleId, metadata.ContentInfo[i].Id.ToString("X8"));
 			}
 		}
 
-		public static async Task<string> DownloadTitleFile(HttpClient client, string downloadDir, string titleId, string file)
+		public static async Task<string> DownloadTitleFile(HttpClient client, string downloadDir, string titleId, string file, bool logBadResponses = true)
 		{
 			string downloadUrl = $"{DownloadUrlBase}/{titleId}/{file}";
 
@@ -85,7 +92,7 @@ namespace NusRipper
 			string headerDownloadPath = Path.Combine(downloadDir, $"{file}{HeaderFileSuffix}");
 			string hashesDownloadPath = Path.Combine(downloadDir, $"{file}{HashesFileSuffix}");
 
-			// Don't re-download files already existing
+			// Don't re-download files that already exist
 			if (File.Exists(fileDownloadPath))
 			{
 				Log.Instance.Info($"File '{fileDownloadPath}' already exists - not re-downloading.");
@@ -103,7 +110,8 @@ namespace NusRipper
 
 					if (!response.IsSuccessStatusCode)
 					{
-						Log.Instance.Error($"Received the following HTTP response code for '{downloadUrl}': {(int) response.StatusCode} {response.StatusCode}");
+						if (logBadResponses)
+							Log.Instance.Error($"Received the following HTTP response code for '{downloadUrl}': {(int) response.StatusCode} {response.StatusCode}");
 						return null;
 					}
 
@@ -160,6 +168,57 @@ namespace NusRipper
 			coll.WriteToFile(hashesDownloadPath);
 
 			return fileDownloadPath;
+		}
+
+		public static async Task DownloadMiscFiles(string downloadDir)
+		{
+			Stopwatch stopwatch = Stopwatch.StartNew();
+			Log.Instance.Info($"Beginning download of miscellaneous files for download dir '{downloadDir}'.");
+
+			using HttpClient client = new HttpClient();
+
+			foreach (string titleDir in Directory.EnumerateDirectories(downloadDir))
+			{
+				string titleId = Path.GetFileName(titleDir);
+				Log.Instance.Info($"Downloading miscellaneous files for '{titleId}'");
+
+				// Download the icon and all screenshots
+				uint fileIndex = ShopDataStartIndex;
+				bool lastFileMissing = false;
+				while (true)
+				{
+					Log.Instance.Debug($"Attempting to download {fileIndex:X8}");
+					string result = await DownloadTitleFile(client, titleDir, titleId, fileIndex++.ToString("X8"), false);
+					if (result == null && lastFileMissing)
+						break;
+					lastFileMissing = result == null;
+				}
+
+				// Download the mysterious empty file for each title
+				Log.Instance.Debug($"Attempting to download {EmptyContentIndex:X8}");
+				string emptyFilePath = await DownloadTitleFile(client, titleDir, titleId, EmptyContentIndex.ToString("X8"));
+
+				if (!string.IsNullOrWhiteSpace(emptyFilePath) && new FileInfo(emptyFilePath)?.Length > 0)
+					Log.Instance.Warn($"File '{emptyFilePath}' is not empty!");
+
+				// Download the ticket at it's content index
+				Log.Instance.Debug($"Attempting to download {TicketContentIndex:X8}");
+				await DownloadTitleFile(client, titleDir, titleId, TicketContentIndex.ToString("X8"), false);
+
+				// Download the metadata files at their content indices
+				fileIndex = MetadataStartIndex;
+				lastFileMissing = false;
+				while (true)
+				{
+					Log.Instance.Debug($"Attempting to download {fileIndex:X8}");
+					string result = await DownloadTitleFile(client, titleDir, titleId, fileIndex--.ToString("X8"), false);
+					if (result == null && lastFileMissing)
+						break;
+					lastFileMissing = result == null;
+				}
+			}
+
+			Log.Instance.Info($"Completed the download of miscellaneous files in {stopwatch.ElapsedAfterStopped().ToNiceString()}.");
 		}
 	}
 }

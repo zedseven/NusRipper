@@ -22,6 +22,9 @@ namespace NusRipper
 					else
 						await Ripper.DownloadFromList(args[1], args[2]);
 					break;
+				case "misc":
+					await Ripper.DownloadMiscFiles(args[1]);
+					break;
 				case "decrypt":
 					byte[] commonKey = await File.ReadAllBytesAsync(args[1]);
 					if (args.Length >= 4)
@@ -47,6 +50,7 @@ namespace NusRipper
 		{
 			Console.WriteLine("CLI Options:");
 			Console.WriteLine("\tlist <listPath> <downloadDir> <maxThreads = 8> - Downloads all files listed in the file at listPath. Each line should be of the format '<titleId> <fileName>...'.");
+			Console.WriteLine("\tmisc <downloadDir> - Downloads all miscellaneous files for each title in downloadDir.");
 			Console.WriteLine("\tdecrypt <commonKeyPath> <archiveDir> <makeQolFiles = false> - Decrypts all files in the downloaded 'archive' of title directories.");
 			Console.WriteLine("\tdom <archiveDir> <outputFilePath> - Builds a No-Intro DAT-o-MATIC XML file from the files in the archiveDir.");
 		}

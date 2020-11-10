@@ -2,7 +2,7 @@
   "profiles": {
     "NusRipper": {
       "commandName": "Project",
-      "commandLineArgs": "dom \"Y:\\Emus\\DSiWare\\NUS Backup\\FullDl-2020-10-01-Clean-Dec\" \"Y:\\Emus\\DSiWare\\NUS Backup\\data.xml\" \"Y:\\Emus\\DSiWare\\NUS Backup\\media.csv\" true"
+      "commandLineArgs": "dom \"C:\\FullDl-2020-10-01-Clean-Dec\" \"Y:\\Emus\\DSiWare\\NUS Backup\\data.xml\" \"Y:\\Emus\\DSiWare\\NUS Backup\\media.csv\" true"
     }
   }
 }

@@ -15,30 +15,30 @@ namespace NusRipper
 	[Serializable]
 	public class RomInfo
 	{
-		private const int GameTitleOffset = 0x00000000;
-		private const int GameTitleSize = 12;
-		private const int GameCodeOffset = 0x0000000C;
-		private const int GameCodeSize = 4;
-		private const int TitleInfoAddressOffset = 0x00000068;
-		private const int TitleInfoAddressSize = 4;
-		private const int TitleInfoTitlesOffset = 0x00000240;
-		private const int TitleInfoTitleSize = 0x100;
-		private const int TitleInfoStaticIconOffset = 0x00000020;
-		private const int TitleInfoAnimIconBitmapsOffset = 0x00001240;
-		private const int TitleInfoAnimIconBitmapCount = 8;
-		private const int TitleInfoAnimIconPalettesOffset = 0x00002240;
-		private const int TitleInfoAnimIconPaletteCount = 8;
-		private const int TitleInfoAnimIconSequenceOffset = 0x00002340;
+		private const int GameTitleOffset                     = 0x00000000;
+		private const int GameTitleSize                       = 12;
+		private const int GameCodeOffset                      = 0x0000000C;
+		private const int GameCodeSize                        = 4;
+		private const int TitleInfoAddressOffset              = 0x00000068;
+		private const int TitleInfoAddressSize                = 4;
+		private const int TitleInfoTitlesOffset               = 0x00000240;
+		private const int TitleInfoTitleSize                  = 0x100;
+		private const int TitleInfoStaticIconOffset           = 0x00000020;
+		private const int TitleInfoAnimIconBitmapsOffset      = 0x00001240;
+		private const int TitleInfoAnimIconBitmapCount        = 8;
+		private const int TitleInfoAnimIconPalettesOffset     = 0x00002240;
+		private const int TitleInfoAnimIconPaletteCount       = 8;
+		private const int TitleInfoAnimIconSequenceOffset     = 0x00002340;
 		private const int TitleInfoAnimIconSequenceFrameCount = 64;
-		private const int HeaderChecksumOffset = 0x0000015E;
+		private const int HeaderChecksumOffset                = 0x0000015E;
 
-		private const int IconTotalSize = 0x220;
-		private const int IconBitmapSize = 0x200;
-		private const int IconPaletteColours = 16;
-		private const int IconPaletteBytesPerColour = 2;
-		private const int IconSquareDim = 32;
+		private const int IconTotalSize               = 0x220;
+		private const int IconBitmapSize              = 0x200;
+		private const int IconPaletteColours          = 16;
+		private const int IconPaletteBytesPerColour   = 2;
+		private const int IconSquareDim               = 32;
 		private const float ColourIntensityConversion = 255f / 31f;
-		private const float FrameDurationConversion = 1f / 60f * 100f;
+		private const float FrameDurationConversion   = 1f / 60f * 100f;
 
 		public const int GameCodeLength = 4;
 		private const int TitleIdLength = 16;
