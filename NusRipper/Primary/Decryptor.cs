@@ -20,54 +20,58 @@ namespace NusRipper
 
 			//Parallel.ForEach(Directory.EnumerateDirectories(archiveDir), new ParallelOptions { MaxDegreeOfParallelism = maxThreads }, async titleDir =>
 			foreach (string titleDir in Directory.EnumerateDirectories(archiveDir))
-			{
-				string titleId = Path.GetFileName(titleDir);
-
-				Log.Instance.Info($"Starting on '{titleId}'.");
-
-				TicketBooth.Ticket ticket = null;
-				List<string> decryptedContents = new List<string>();
-				IEnumerable<string> metadataFiles = Directory.EnumerateFiles(titleDir).Where(p => Constants.MetadataFileRegex.IsMatch(p));
-				string ticketPath = Path.Combine(titleDir, Ripper.TicketFileName);
-				if (File.Exists(ticketPath))
-				{
-					Log.Instance.Trace($"A ticket exists for '{titleDir}'.");
-					ticket = new TicketBooth.Ticket(commonKey, titleId, ticketPath);
-					foreach (string metadataPath in metadataFiles)
-						decryptedContents.AddRange(await DecryptMetadataContents(ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
-				}
-				else
-				{
-					foreach (string metadataPath in metadataFiles)
-					{
-						if (ticket == null)
-						{
-							(TicketBooth.Ticket ticket, List<string> contentsList) res =
-								await MakeTicketAndDecryptMetadataContents(Helpers.HexStringToBytes(titleId),
-									new TitleMetadata(metadataPath), titleDir, makeQolFiles);
-							ticket = res.ticket;
-							decryptedContents.AddRange(res.contentsList);
-						}
-						else
-							decryptedContents.AddRange(await DecryptMetadataContents(ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
-					}
-				}
-
-				if (ticket == null)
-					continue;
-
-				IEnumerable<string> contentFiles = Directory.EnumerateFiles(titleDir).Select(Path.GetFileName).Where(p => Constants.ContentEncryptedFileRegex.IsMatch(p));
-
-				IEnumerable<string> remainingContents = contentFiles.Except(decryptedContents);
-				foreach (string contentName in remainingContents)
-				{
-					string contentPath = Path.Combine(titleDir, contentName);
-					Log.Instance.Warn($"Attempting to decrypt content without associated metadata: '{contentPath}'");
-					await ticket.DecryptContent(0, contentPath);
-				}
-			}//);
+				await DecryptEntry(commonKey, titleDir, makeQolFiles);
+			//);
 
 			Log.Instance.Info($"Completed the batch processing in {stopwatch.ElapsedAfterStopped().ToNiceString()}.");
+		}
+
+		internal static async Task DecryptEntry(byte[] commonKey, string titleDir, bool makeQolFiles = false)
+		{
+			string titleId = Path.GetFileName(titleDir);
+
+			Log.Instance.Info($"Starting on '{titleId}'.");
+
+			TicketBooth.Ticket ticket = null;
+			List<string> decryptedContents = new List<string>();
+			IEnumerable<string> metadataFiles = Directory.EnumerateFiles(titleDir).Where(p => Constants.MetadataFileRegex.IsMatch(p));
+			string ticketPath = Path.Combine(titleDir, Ripper.TicketFileName);
+			if (File.Exists(ticketPath))
+			{
+				Log.Instance.Trace($"A ticket exists for '{titleDir}'.");
+				ticket = new TicketBooth.Ticket(commonKey, titleId, ticketPath);
+				foreach (string metadataPath in metadataFiles)
+					decryptedContents.AddRange(await DecryptMetadataContents(ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
+			}
+			else
+			{
+				foreach (string metadataPath in metadataFiles)
+				{
+					if (ticket == null)
+					{
+						(TicketBooth.Ticket ticket, List<string> contentsList) res =
+							await MakeTicketAndDecryptMetadataContents(Helpers.HexStringToBytes(titleId),
+								new TitleMetadata(metadataPath), titleDir, makeQolFiles);
+						ticket = res.ticket;
+						decryptedContents.AddRange(res.contentsList);
+					}
+					else
+						decryptedContents.AddRange(await DecryptMetadataContents(ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
+				}
+			}
+
+			if (ticket == null)
+				return;
+
+			IEnumerable<string> contentFiles = Directory.EnumerateFiles(titleDir).Select(Path.GetFileName).Where(p => Constants.ContentEncryptedFileRegex.IsMatch(p));
+
+			IEnumerable<string> remainingContents = contentFiles.Except(decryptedContents);
+			foreach (string contentName in remainingContents)
+			{
+				string contentPath = Path.Combine(titleDir, contentName);
+				Log.Instance.Warn($"Attempting to decrypt content without associated metadata: '{contentPath}'");
+				await ticket.DecryptContent(0, contentPath);
+			}
 		}
 
 		public static async Task<(TicketBooth.Ticket ticket, List<string> contentsList)> MakeTicketAndDecryptMetadataContents(byte[] titleIdBytes, TitleMetadata metadata, string titleDir, bool makeQolFiles = false)

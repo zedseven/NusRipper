@@ -45,6 +45,9 @@
     <None Update="ReferenceFiles\LarsenDatFiles.csv">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="ReferenceFiles\TitlesCleaned.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

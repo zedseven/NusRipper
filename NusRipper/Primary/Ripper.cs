@@ -27,10 +27,10 @@ namespace NusRipper
 		private const int MaxDownloadAttempts = 5;
 
 		// CDN Special Content IDs
-		private const uint ShopDataStartIndex = 0xfffd0000;
-		private const uint TicketContentIndex = 0xfffffffd;
-		private const uint EmptyContentIndex  = 0xfffffffe;
-		private const uint MetadataStartIndex = 0xfffeffff;
+		public const uint ShopDataStartIndex = 0xfffd0000;
+		public const uint TicketContentIndex = 0xfffffffd;
+		public const uint EmptyContentIndex  = 0xfffffffe;
+		public const uint MetadataStartIndex = 0xfffeffff;
 
 		internal static async Task DownloadFromList(string listPath, string downloadDir, int maxThreads = 8)
 		{

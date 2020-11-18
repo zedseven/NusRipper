@@ -45,18 +45,28 @@ namespace NusRipper
 		};
 		public static readonly Dictionary<Regions, Language.LanguageCodes[]> RegionExpectedLanguageMap = new Dictionary<Regions, Language.LanguageCodes[]>
 		{
-			[Regions.USA]         = new[] { Language.LanguageCodes.En, Language.LanguageCodes.Ja, Language.LanguageCodes.Es },
+			[Regions.USA]         = new[] { Language.LanguageCodes.En, Language.LanguageCodes.Es },
 			[Regions.Japan]       = new[] { Language.LanguageCodes.Ja, Language.LanguageCodes.En },
 			[Regions.Europe]      = new[] { Language.LanguageCodes.En, Language.LanguageCodes.Fr, Language.LanguageCodes.De, Language.LanguageCodes.It },
-			[Regions.Australia]   = new[] { Language.LanguageCodes.En, Language.LanguageCodes.Ja },
+			[Regions.Australia]   = new[] { Language.LanguageCodes.En },
 			[Regions.Korea]       = new[] { Language.LanguageCodes.Ko, Language.LanguageCodes.Ja, Language.LanguageCodes.En },
 			[Regions.China]       = new[] { Language.LanguageCodes.Zh, Language.LanguageCodes.Ja, Language.LanguageCodes.En },
-			[Regions.Germany]     = new[] { Language.LanguageCodes.De, Language.LanguageCodes.Ja },
-			[Regions.France]      = new[] { Language.LanguageCodes.Fr, Language.LanguageCodes.En, Language.LanguageCodes.Ja },
+			[Regions.Germany]     = new[] { Language.LanguageCodes.De },
+			[Regions.France]      = new[] { Language.LanguageCodes.Fr, Language.LanguageCodes.En },
 			[Regions.Italy]       = new[] { Language.LanguageCodes.It, Language.LanguageCodes.En },
 			[Regions.Spain]       = new[] { Language.LanguageCodes.Es },
 			[Regions.Netherlands] = new[] { Language.LanguageCodes.De },
 			[Regions.World]       = new[] { Language.LanguageCodes.En, Language.LanguageCodes.Ja }
+		};
+		public static readonly Dictionary<Regions, HashSet<Language.LanguageCodes>> RegionSystemLanguages = new Dictionary<Regions, HashSet<Language.LanguageCodes>>
+		{
+			[Regions.Japan]     = new HashSet<Language.LanguageCodes> { Language.LanguageCodes.Ja },
+			[Regions.USA]       = new HashSet<Language.LanguageCodes> { Language.LanguageCodes.En, Language.LanguageCodes.Fr, Language.LanguageCodes.Es },
+			[Regions.Europe]    = new HashSet<Language.LanguageCodes> { Language.LanguageCodes.En, Language.LanguageCodes.Fr, Language.LanguageCodes.De, Language.LanguageCodes.Es, Language.LanguageCodes.It },
+			[Regions.Australia] = new HashSet<Language.LanguageCodes> { Language.LanguageCodes.En },
+			[Regions.China]     = new HashSet<Language.LanguageCodes> { Language.LanguageCodes.Zh },
+			[Regions.Korea]     = new HashSet<Language.LanguageCodes> { Language.LanguageCodes.Ko },
+			[Regions.World]     = new HashSet<Language.LanguageCodes> { Language.LanguageCodes.En, Language.LanguageCodes.Ja, Language.LanguageCodes.Fr, Language.LanguageCodes.De, Language.LanguageCodes.Es, Language.LanguageCodes.It, Language.LanguageCodes.Zh, Language.LanguageCodes.Ko }
 		};
 		public static readonly Dictionary<Regions, Regions[]> RegionRelatedRegionsMap = new Dictionary<Regions, Regions[]>
 		{

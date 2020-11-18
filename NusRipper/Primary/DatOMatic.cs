@@ -18,11 +18,12 @@ namespace NusRipper
 {
 	internal static class DatOMatic
 	{
-		private const string LastModifiedLabel = "Last-Modified";
+		private const string LastModifiedLabel            = "Last-Modified";
 		private const string RemoveNoIntroDisallowedChars = @"[^a-zA-Z0-9 $!#%'()+,\-.;=@\[\]\^_{}~]";
-		private const string DeletedTitleFileName = "DeletedTitle.txt"; // The file name of a file used to indicate a title had been deleted from the DSi Shop
-		private const int StartingArchiveId = 1; // The dat should be the establishing set, so it can start at 0001
-		private const string SerializationDatFile = "allTitleInfo.dat";
+		private const string DeletedTitleFileName         = "DeletedTitle.txt"; // The file name of a file used to indicate a title had been deleted from the DSi Shop
+		private const int StartingArchiveId               = 1; // The dat should be the establishing set, so it can start at 0001
+		private const string SerializationDatFile         = "allTitleInfo.dat";
+		private const string GalaxyFileOverrides          = "GalaxyExtras";
 
 		private const string TicketExtension        = "tik";
 		private const string MetadataExtension      = "tmd";
@@ -32,6 +33,8 @@ namespace NusRipper
 
 		private const string MainContentItemName = "Main Content";
 		private const string MiscContentItemName = "Miscellaneous Content";
+
+		private const string GameTitleIdHigh = "00030004";
 
 		// I've tried really hard to keep the functions of this tool generic and largely system-agnostic, but unfortunately I had to do it this way
 		// ReSharper disable twice IdentifierTypo
@@ -116,7 +119,6 @@ namespace NusRipper
 		{
 			// Title Metadata
 			public string TitleId;
-			public string TitleIdLower => TitleId.ToLowerInvariant();
 			public string TitleIdGameCode;
 			public char RegionCode;
 			public Region.Regions Region;
@@ -127,6 +129,14 @@ namespace NusRipper
 			public List<Language.LanguageCodes> NebulousLanguages = new List<Language.LanguageCodes>();
 			public RomInfo.TitleIndices PrimaryLanguageIndex;
 			public bool Found3dsPort;
+
+			public string TitleIdHigh => TitleId.Substring(0, 8);
+			public string TitleIdLow => TitleId.Substring(8);
+			public string LanguagesStr => string.Join(',', Languages.OrderBy(l =>
+			{
+				int index = LanguageOrder.IndexOf(l);
+				return index > -1 ? index : int.MaxValue;
+			}));
 
 			// Title File Info
 			public List<(string fileName, ushort version)> TicketFiles = new List<(string fileName, ushort version)>();
@@ -199,7 +209,10 @@ namespace NusRipper
 					? $"Beginning a build of a DAT-o-MATIC XML dat file of '{archiveDir}', writing to '{outputXmlPath}' and '{outputMediaPath}'."
 					: $"Beginning a build of a DAT-o-MATIC XML dat file of '{archiveDir}', writing to '{outputXmlPath}'.");
 
-			List<FullTitleInfo> allTitleInfo = new List<FullTitleInfo>();
+			Dictionary<string, string> CleanedNoIntroTitles = new Dictionary<string, string>();
+			Helpers.LoadCsvIntoDictionary(Path.Combine(Constants.ReferenceFilesPath, "TitlesCleaned.csv"), CleanedNoIntroTitles);
+
+			List <FullTitleInfo> allTitleInfo = new List<FullTitleInfo>();
 			if (!File.Exists(SerializationDatFile))
 			{
 				// Run through all titles and collect their information
@@ -212,7 +225,7 @@ namespace NusRipper
 					};
 
 					// Manage basic Title ID stuff
-					titleInfo.TitleId = Path.GetFileName(titleDir);
+					titleInfo.TitleId = Path.GetFileName(titleDir).ToUpperInvariant();
 					titleInfo.TitleIdGameCode = RomInfo.DeriveGameCodeFromTitleId(titleInfo.TitleId);
 
 					Log.Instance.Info($"{titleInfo.TitleId} - {titleInfo.TitleIdGameCode}");
@@ -363,6 +376,10 @@ namespace NusRipper
 						else
 							Log.Instance.Debug($"Title '{titleInfo.TitleId}' does not have an existing 3DS port or the supported languages were not able to be found. Deriving language and title information from the latest ROM.");
 
+						HashSet<Language.LanguageCodes> regionSystemLangs = titleInfo.TitleIdHigh != GameTitleIdHigh
+							? Region.RegionSystemLanguages[titleInfo.Region.GetPrimaryRegion()]
+							: null;
+
 						Tuple<string, int, HashSet<Language.LanguageCodes>>[] titleGroups = titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.Titles
 							.Select((t, i) => (t: Language.SanitizeRomTitleForLanguageDetermination(t), i))
 							.GroupBy(t => t.t)
@@ -373,9 +390,14 @@ namespace NusRipper
 									.ToHashSet()))
 							.ToArray();
 
-						foreach (Tuple<string, int, HashSet<Language.LanguageCodes>> titleEntry in titleGroups.Where(
-							g => g.Item3.Count == 1))
-							titleInfo.Languages.Add(RomInfo.TitleIndexToLanguageCode(titleEntry.Item2));
+						if (titleInfo.TitleIdHigh == GameTitleIdHigh)
+							foreach (Tuple<string, int, HashSet<Language.LanguageCodes>> titleEntry in titleGroups.Where(
+								g => g.Item3.Count == 1))
+								titleInfo.Languages.Add(RomInfo.TitleIndexToLanguageCode(titleEntry.Item2));
+						else
+							foreach (Tuple<string, int, HashSet<Language.LanguageCodes>> titleEntry in titleGroups.Where(
+								g => g.Item3.Count == 1 && regionSystemLangs.Contains(g.Item3.First())))
+								titleInfo.Languages.Add(RomInfo.TitleIndexToLanguageCode(titleEntry.Item2));
 
 						Tuple<string, int, HashSet<Language.LanguageCodes>>[] titleConflicts = titleGroups
 							.Where(g => g.Item3.Count > 1)
@@ -389,10 +411,13 @@ namespace NusRipper
 							Log.Instance.Trace(
 								$"Title '{titleInfo.TitleId}' has a title conflict for title '{sanitizedTitle}' ({titleConflicts[i].Item3} titles are the same).");
 
-							List<Language.LanguageCodes> langs = Language.DetermineLanguage(sanitizedTitle);
-							langs = langs
-								.OrderBy(l => titleConflicts[i].Item3.Contains(l) ? 0 : 1)
-								.ThenBy(l => regionLangs.Contains(l) ? 0 : 1)
+							List<Language.LanguageCodes> langs = Language.DetermineLanguage(sanitizedTitle); // Get NTextCat's language predictions
+							langs = (titleInfo.TitleIdHigh == GameTitleIdHigh
+									? langs
+									: langs.Intersect(regionSystemLangs) // System titles have no in-ROM language selector, so we know the only possible supported languages are the ones supported in the settings for the region
+								)
+								.Intersect(titleConflicts[i].Item3)                                                      // Keep only the languages that are part of the conflict
+								.OrderBy(l => regionLangs.Contains(l) ? 0 : 1)                                           // Prioritize languages that are expected for the region
 								.ToList();
 
 							bool addedLang = false;
@@ -410,14 +435,13 @@ namespace NusRipper
 								break;
 							}
 
-							if (!addedLang)
-							{
-								Language.LanguageCodes defaultLang = Region.RegionExpectedLanguageMap[primaryRegion][0];
-								Log.Instance.Warn(
-									$"No languages were found or determined for the title '{titleInfo.TitleId}'s conflict \"{titleConflicts[i]}\". Proceeding with the default language for the region ({titleInfo.Region}), {defaultLang}.");
-								titleInfo.Languages.Add(defaultLang);
-								titleInfo.NebulousLanguages.Add(defaultLang);
-							}
+							if (addedLang)
+								continue;
+							Language.LanguageCodes defaultLang = Region.RegionExpectedLanguageMap[primaryRegion][0];
+							Log.Instance.Warn(
+								$"No languages were found or determined for the title '{titleInfo.TitleId}'s conflict \"{titleConflicts[i]}\". Proceeding with the default language for the region ({titleInfo.Region}), {defaultLang}.");
+							titleInfo.Languages.Add(defaultLang);
+							titleInfo.NebulousLanguages.Add(defaultLang);
 						}
 
 						if (titleInfo.Languages.Count <= 0)
@@ -440,7 +464,8 @@ namespace NusRipper
 					primaryTitle ??= titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.Titles[(int) titleInfo.PrimaryLanguageIndex];
 					string[] primaryTitleParts = primaryTitle?.Split('\n');
 					titleInfo.NoIntroTitle = "";
-					if (primaryTitle != null && primaryTitleParts.Length > 0)
+					if (!CleanedNoIntroTitles.TryGetValue(titleInfo.TitleId, out titleInfo.NoIntroTitle) &&
+					    primaryTitle != null && primaryTitleParts.Length > 0)
 						titleInfo.NoIntroTitle = GetNoIntroTitle(primaryTitleParts[0], primaryTitleParts.Length > 2 ? primaryTitleParts[1] : null, primaryLanguage);
 
 					titleInfo.System = titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleAsNullIfDefault(titleInfo.PrimaryLanguageIndex) == null ||
@@ -527,24 +552,6 @@ namespace NusRipper
 				LoadCsvIntoDatFileList(Path.Combine(Constants.ReferenceFilesPath, "LarsenDatFiles.csv"), DatFilesSetLarsen);
 				HashSet<(string titleId, string fileName)> DatFilesSetGalaxy = new HashSet<(string, string)>();
 				LoadCsvIntoDatFileList(Path.Combine(Constants.ReferenceFilesPath, "GalaxyDatFiles.csv"), DatFilesSetGalaxy);
-				Dictionary<string, RomEntry> GalaxyMismatchedTickets = new Dictionary<string, RomEntry>();
-				Helpers.LoadCsvIntoDictionary(Path.Combine(Constants.ReferenceFilesPath, "GalaxyMismatchedTickets.csv"),
-					GalaxyMismatchedTickets,
-					t => t,
-					h =>
-					{
-						string[] hashes = h.Split(' ');
-						return new RomEntry(RomEntry.EntryTypes.Ticket,
-							true,
-							Ripper.TicketFileName,
-							TicketExtension,
-							new Hasher.FileHashCollection(null, hashes[0], hashes[1], hashes[2], null),
-							null,
-							null,
-							null,
-							$"{Ripper.TicketFileName}.{hashes[0]}",
-							DumperNames.Galaxy);
-					});
 				Dictionary<(string titleId, string fileName), DateTime> GalaxyFileDates = new Dictionary<(string titleId, string fileName), DateTime>();
 				Helpers.LoadCsvIntoDictionary(Path.Combine(Constants.ReferenceFilesPath, "GalaxyFileDates.csv"),
 					GalaxyFileDates,
@@ -554,6 +561,31 @@ namespace NusRipper
 						return (parts[0], parts[1]);
 					},
 					d => DateTime.Parse(d, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+				Dictionary<string, RomEntry> GalaxyMismatchedTickets = new Dictionary<string, RomEntry>();
+				foreach (string titlePath in Directory.EnumerateDirectories(Path.Combine(Path.GetDirectoryName(archiveDir), GalaxyFileOverrides)))
+				{
+					string titleId = Path.GetFileName(titlePath);
+					foreach (string titleFilePath in Directory.EnumerateFiles(titlePath))
+					{
+						string titleFile = Path.GetFileName(titleFilePath);
+						(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(titleFilePath);
+						modTime ??= File.GetLastWriteTime(titleFilePath);
+
+						ushort version = TicketBooth.GetTicketVersion(titleFilePath);
+						string displayName = $"{titleFile}.{version}";
+						string versionStr = $"{version},{TitleMetadata.VersionToHumanReadable(version)}";
+
+						GalaxyMismatchedTickets[titleId] = new RomEntry(RomEntry.EntryTypes.Ticket,
+							true,
+							titleFile,
+							TicketExtension,
+							hashes,
+							modTime,
+							versionStr,
+							displayName: displayName,
+							specificDumper: DumperNames.Galaxy);
+					}
+				}
 
 				// Prepare the title info
 				IEnumerable<(string regionAgnosticKey, List<FullTitleInfo> titles)> preparedTitleInfo = allTitleInfo
@@ -588,12 +620,7 @@ namespace NusRipper
 						await xWriter.WriteAttributeAsync("name",           titleInfo.NoIntroTitle);
 						await xWriter.WriteAttributeAsync("namealt",        "");
 						await xWriter.WriteAttributeAsync("region",         titleInfo.Region.ToString());
-						await xWriter.WriteAttributeAsync("languages",
-							string.Join(',', titleInfo.Languages.OrderBy(l =>
-							{
-								int index = LanguageOrder.IndexOf(l);
-								return index > -1 ? index : int.MaxValue;
-							})));
+						await xWriter.WriteAttributeAsync("languages",      titleInfo.LanguagesStr);
 						await xWriter.WriteAttributeAsync("version",        "");
 						await xWriter.WriteAttributeAsync("devstatus",      "");
 						await xWriter.WriteAttributeAsync("additional",     "");
@@ -618,6 +645,9 @@ namespace NusRipper
 
 						// Build a list of all ROM entries to write
 						List<RomEntry> romEntries = new List<RomEntry>();
+
+						Dictionary<string, string> metadataHashes = new Dictionary<string, string>();
+						Dictionary<string, string> metadataIdHashes = new Dictionary<string, string>();
 
 						// Ticket files
 						foreach ((string fileName, ushort version) in titleInfo.TicketFiles)
@@ -645,21 +675,23 @@ namespace NusRipper
 						}
 
 						// Metadata files
-						foreach ((string fileName, TitleMetadata metadata) metadata in titleInfo.MetadataFiles)
+						foreach ((string fileName, TitleMetadata metadata) in titleInfo.MetadataFiles)
 						{
-							(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(Path.Combine(titleInfo.TitleDir, metadata.fileName));
-							string versionStr = $"{metadata.metadata.TitleVersion},{TitleMetadata.VersionToHumanReadable(metadata.metadata.TitleVersion)}";
+							(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(Path.Combine(titleInfo.TitleDir, fileName));
+							string versionStr = $"{metadata.TitleVersion},{TitleMetadata.VersionToHumanReadable(metadata.TitleVersion)}";
+
+							metadataHashes[hashes.Sha1String] = fileName;
 
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Metadata,
 								true,
-								metadata.fileName,
+								fileName,
 								MetadataExtension,
 								hashes,
 								modTime,
 								versionStr));
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Metadata,
 								false,
-								metadata.fileName,
+								fileName,
 								MetadataExtension,
 								hashes,
 								modTime,
@@ -707,6 +739,17 @@ namespace NusRipper
 						foreach ((string fileName, string extension) in titleInfo.MiscellaneousFiles)
 						{
 							(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(Path.Combine(titleInfo.TitleDir, fileName));
+							string versionStr = null;
+							if (extension == MetadataExtension || extension == TicketExtension)
+							{
+								ushort version = extension == MetadataExtension
+									? new TitleMetadata(Path.Combine(titleInfo.TitleDir, fileName)).TitleVersion
+									: TicketBooth.GetTicketVersion(Path.Combine(titleInfo.TitleDir, fileName));
+								versionStr = $"{version},{TitleMetadata.VersionToHumanReadable(version)}";
+							}
+
+							if (extension == MetadataExtension)
+								metadataIdHashes[hashes.Sha1String] = fileName;
 
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Miscellaneous,
 								true,
@@ -714,8 +757,37 @@ namespace NusRipper
 								extension,
 								hashes,
 								modTime,
+								versionStr,
 								specificDumper: DumperNames.zedseven));
 						}
+
+						// Check for deleted metadata files
+						if (metadataHashes.Count != metadataIdHashes.Count)
+							Log.Instance.Warn($"The count of metadata files does not match the count of metadata ID files: {metadataHashes.Count} vs {metadataIdHashes.Count}");
+						Dictionary<string, string> metadataIdNormalMap = new Dictionary<string, string>();
+						foreach (string metadataHash in metadataHashes.Keys)
+							if (!metadataIdHashes.ContainsKey(metadataHash))
+								Log.Instance.Warn($"The metadata file '{metadataHashes[metadataHash]}' does not exist in ID form ({metadataHash}).");
+						foreach (string metadataIdHash in metadataIdHashes.Keys)
+						{
+							if (!metadataHashes.TryGetValue(metadataIdHash, out string metadataName))
+							{
+								Log.Instance.Warn($"The metadata ID file '{metadataIdHashes[metadataIdHash]}' does not exist in normal form ({metadataIdHash}).");
+								continue;
+							}
+							metadataIdNormalMap[metadataIdHashes[metadataIdHash]] = metadataName;
+						}
+
+						List<uint> metadataIds = metadataIdHashes.Values
+							.Select(n => uint.Parse(n, NumberStyles.HexNumber))
+							.OrderBy(i => i)
+							.ToList();
+						for (int j = 1; j < metadataIds.Count; j++)
+							if (metadataIds[j] - metadataIds[j - 1] != 1)
+								Log.Instance.Warn(
+									$"Missing metadata ID between {metadataIds[j]:X8} ({metadataIdNormalMap[metadataIds[j].ToString("X8")]}) and {metadataIds[j - 1]:X8} ({metadataIdNormalMap[metadataIds[j - 1].ToString("X8")]})");
+						if (metadataIds.Count > 0 && metadataIds[^1] != Ripper.MetadataStartIndex)
+							Log.Instance.Warn("Metadata IDs don't seem to start at the beginning - it's possible the first entry was deleted.");
 
 						// Source entries for each dumper involved in the project, to capture their work and give them appropriate credit
 						// it's a bit of a mess, but this was the cleanest way to do it without an exorbitant amount of extra work
@@ -728,7 +800,8 @@ namespace NusRipper
 								case DumperNames.zedseven:
 									dumperEntries.AddRange(
 										romEntries
-											.Where(e => !titleInfo.Deleted || !e.Encrypted || e.SpecificDumper == DumperNames.zedseven)
+											.Where(e => (e.SpecificDumper == null || e.SpecificDumper == DumperNames.zedseven) &&
+											            (!titleInfo.Deleted || !e.Encrypted))
 											.GroupBy(e =>
 											{
 												try
@@ -746,12 +819,12 @@ namespace NusRipper
 									break;
 								case DumperNames.Galaxy:
 									List<RomEntry> ungroupedEntries = romEntries.Where(e =>
+										(e.SpecificDumper == null || e.SpecificDumper == DumperNames.Galaxy) &&
 										e.Encrypted &&
-										DatFilesSetGalaxy.Contains((titleInfo.TitleIdLower, e.FileName)) ||
-										e.SpecificDumper == DumperNames.Galaxy).ToList();
+										DatFilesSetGalaxy.Contains((titleInfo.TitleId, e.FileName))).ToList();
 
 									// Swap out tickets for the Galaxy-specific hashes if necessary
-									if (GalaxyMismatchedTickets.TryGetValue(titleInfo.TitleIdLower, out RomEntry mismatchedTicketEntry))
+									if (GalaxyMismatchedTickets.TryGetValue(titleInfo.TitleId, out RomEntry mismatchedTicketEntry))
 									{
 										int ticketIndex = -1;
 										for (int j = 0; j < ungroupedEntries.Count; j++)
@@ -770,7 +843,7 @@ namespace NusRipper
 										ungroupedEntries
 											.GroupBy(e =>
 											{
-												if (GalaxyFileDates.TryGetValue((titleInfo.TitleIdLower, e.FileName),
+												if (GalaxyFileDates.TryGetValue((titleInfo.TitleId, e.FileName),
 													out DateTime dumpDate))
 													return (DateTime?) dumpDate.Date;
 												return null;
@@ -782,9 +855,9 @@ namespace NusRipper
 								case DumperNames.Larsenv:
 									dumperEntries.Add(("2018-11-17",
 										romEntries.Where(e =>
+												(e.SpecificDumper == null || e.SpecificDumper == DumperNames.Larsenv) &&
 												e.Encrypted &&
-												DatFilesSetLarsen.Contains((titleInfo.TitleIdLower, e.FileName)) ||
-												e.SpecificDumper == DumperNames.Larsenv)
+												DatFilesSetLarsen.Contains((titleInfo.TitleId, e.FileName)))
 											.ToList()));
 									break;
 							}
@@ -809,7 +882,7 @@ namespace NusRipper
 								await xWriter.WriteAttributeAsync("dumper",           dumperName.ToString());
 								await xWriter.WriteAttributeAsync("project",          "");
 								await xWriter.WriteAttributeAsync("session",          "");
-								await xWriter.WriteAttributeAsync("tool",             dumperName == DumperNames.zedseven ? "NusRipper v" + Constants.ProgramVersion : "Custom");
+								await xWriter.WriteAttributeAsync("tool",             dumperName == DumperNames.zedseven ? "NUS Ripper v" + Constants.ProgramVersion : "Custom");
 								await xWriter.WriteAttributeAsync("origin",           "CDN");
 								await xWriter.WriteAttributeAsync("comment1",         "");
 								await xWriter.WriteAttributeAsync("comment2",         "");
@@ -830,7 +903,7 @@ namespace NusRipper
 								await xWriter.WriteAttributeAsync("boxserial",        "");
 								await xWriter.WriteAttributeAsync("mediastamp",       "");
 								await xWriter.WriteAttributeAsync("boxbarcode",       "");
-								await xWriter.WriteAttributeAsync("digitalserial1",   titleInfo.TitleIdLower);
+								await xWriter.WriteAttributeAsync("digitalserial1",   titleInfo.TitleId);
 								await xWriter.WriteAttributeAsync("digitalserial2",   titleInfo.TitleIdGameCode);
 								await xWriter.WriteEndElementAsync();
 
@@ -850,23 +923,32 @@ namespace NusRipper
 								archiveNum,
 								titleInfo.Found3dsPort ? "3DS eShop Port" : "Guessed From ROM Titles",
 								string.Join(',', titleInfo.NebulousLanguages),
-								titleInfo.Languages.Count == 1                          ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(titleInfo.PrimaryLanguageIndex)               : "",
-								titleInfo.Languages.Contains(Language.LanguageCodes.En) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(RomInfo.TitleIndices.EnglishIndex)  : "",
-								titleInfo.Languages.Contains(Language.LanguageCodes.Ja) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(RomInfo.TitleIndices.JapaneseIndex) : "",
-								titleInfo.Languages.Contains(Language.LanguageCodes.Fr) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(RomInfo.TitleIndices.FrenchIndex)   : "",
-								titleInfo.Languages.Contains(Language.LanguageCodes.De) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(RomInfo.TitleIndices.GermanIndex)   : "",
-								titleInfo.Languages.Contains(Language.LanguageCodes.Es) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(RomInfo.TitleIndices.SpanishIndex)  : "",
-								titleInfo.Languages.Contains(Language.LanguageCodes.It) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(RomInfo.TitleIndices.ItalianIndex)  : "",
-								titleInfo.Languages.Contains(Language.LanguageCodes.Zh) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(RomInfo.TitleIndices.ChineseIndex)  : "",
-								titleInfo.Languages.Contains(Language.LanguageCodes.Ko) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitleOnly(RomInfo.TitleIndices.KoreanIndex)   : "");
+								titleInfo.Languages.Count == 1                          ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(titleInfo.PrimaryLanguageIndex)     : "",
+								titleInfo.Languages.Contains(Language.LanguageCodes.En) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(RomInfo.TitleIndices.EnglishIndex)  : "",
+								titleInfo.Languages.Contains(Language.LanguageCodes.Ja) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(RomInfo.TitleIndices.JapaneseIndex) : "",
+								titleInfo.Languages.Contains(Language.LanguageCodes.Fr) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(RomInfo.TitleIndices.FrenchIndex)   : "",
+								titleInfo.Languages.Contains(Language.LanguageCodes.De) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(RomInfo.TitleIndices.GermanIndex)   : "",
+								titleInfo.Languages.Contains(Language.LanguageCodes.Es) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(RomInfo.TitleIndices.SpanishIndex)  : "",
+								titleInfo.Languages.Contains(Language.LanguageCodes.It) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(RomInfo.TitleIndices.ItalianIndex)  : "",
+								titleInfo.Languages.Contains(Language.LanguageCodes.Zh) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(RomInfo.TitleIndices.ChineseIndex)  : "",
+								titleInfo.Languages.Contains(Language.LanguageCodes.Ko) ? titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.GetTitle(RomInfo.TitleIndices.KoreanIndex)   : "");
 							await WriteCsvRow(tWriter, titleInfo.TitleId, titleInfo.NoIntroTitle);
 						}
 
 						// Make user-friendly NDS files of the latest version of each title
 						if (makeNdsFiles)
-							File.Copy(Path.Combine(titleInfo.TitleDir, titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].fileName),
-								Path.Combine(titleInfo.TitleDir, $"{titleInfo.NoIntroTitle} ({titleInfo.Region.ToString()}).nds"),
+						{
+							List<string> additionalInfo = new List<string> { titleInfo.Region.ToString() };
+							if (titleInfo.Found3dsPort)
+								additionalInfo.Add(titleInfo.LanguagesStr);
+
+							File.Copy(
+								Path.Combine(titleInfo.TitleDir,
+									titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].fileName),
+								Path.Combine(titleInfo.TitleDir,
+									$"{titleInfo.NoIntroTitle} {string.Join(' ', additionalInfo.Select(s => $"({s})"))}.{(titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.ValidContent ? DecryptedGameExtension : BinaryExtension)}"),
 								true);
+						}
 
 						archiveId++;
 					}
@@ -992,7 +1074,7 @@ namespace NusRipper
 
 		private static async Task WriteCsvRow(TextWriter writer, params string[] values)
 			=> await writer.WriteLineAsync(string.Join(',',
-				values.Select(v => v != null ? v.Contains(',') ? @"""" + v.Replace(@"""", @"""""") + @"""" : v.Replace(@"""", @"""""") : "")));
+				values.Select(v => v != null ? v.Contains(',') || v.Contains('\n') ? @"""" + v.Replace(@"""", @"""""") + @"""" : v.Replace(@"""", @"""""") : "")));
 
 		private static bool LoadCsvIntoDatFileList(string path, HashSet<(string, string)> set)
 		{

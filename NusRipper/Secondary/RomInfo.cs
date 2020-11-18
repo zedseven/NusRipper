@@ -273,6 +273,10 @@ namespace NusRipper
 			=> !string.Equals(Titles[(int) index], DefaultTitle, StringComparison.InvariantCultureIgnoreCase) ? Titles[(int) index] : null;
 
 		[Pure]
+		internal string GetTitle(TitleIndices index = TitleIndices.EnglishIndex)
+			=> Titles[(int) index];
+
+		[Pure]
 		private static ushort CalcCrc16Modbus(byte[] bytes)
 		{
 			ushort crc = 0xFFFF;

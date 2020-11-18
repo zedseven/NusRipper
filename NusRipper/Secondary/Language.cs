@@ -90,6 +90,7 @@ namespace NusRipper
 			"Twl",
 			"Banner",
 			"TWLBanner",
+			"TWLBannerImage",
 			"Mario",
 			"Luigi",
 			"Wario",

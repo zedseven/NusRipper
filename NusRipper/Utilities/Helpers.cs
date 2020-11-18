@@ -54,7 +54,6 @@ namespace NusRipper
 		public static string AsNullIfEmpty(this string str)
 			=> str.Length <= 0 ? null : str;
 
-		[Pure]
 		public static TimeSpan ElapsedAfterStopped(this Stopwatch stopwatch)
 		{
 			stopwatch.Stop();
@@ -118,7 +117,11 @@ namespace NusRipper
 
 					int commaIndex = line.IndexOf(',');
 
-					dict[line.Substring(0, commaIndex)] = line.Substring(commaIndex + 1);
+					string value = line.Substring(commaIndex + 1);
+					if (value.Length >= 2 && value[0] == '"' && value[1] != '"')
+						value = value.Substring(1, value.Length - 2);
+
+					dict[line.Substring(0, commaIndex)] = value;
 				}
 			}
 			catch (Exception e)
@@ -151,7 +154,11 @@ namespace NusRipper
 
 					int commaIndex = line.IndexOf(',');
 
-					dict[keyMapper(line.Substring(0, commaIndex))] = valueMapper(line.Substring(commaIndex + 1));
+					string value = line.Substring(commaIndex + 1);
+					if (value.Length >= 2 && value[0] == '"' && value[1] != '"')
+						value = value.Substring(1, value.Length - 2);
+
+					dict[keyMapper(line.Substring(0, commaIndex))] = valueMapper(value);
 				}
 			}
 			catch (Exception e)

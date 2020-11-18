@@ -99,7 +99,8 @@ namespace NusRipper
 							crc32 = lineParts[1].Trim();
 							if (contentPath != null)
 							{
-								string crc32DoubleCheck = Crc32.ComputeChecksum(File.ReadAllBytes(contentPath)).ToString("x8");
+								byte[] fileBytes = File.ReadAllBytes(contentPath);
+								string crc32DoubleCheck = (fileBytes.LongLength > 0 ? Crc32.ComputeChecksum(fileBytes) : 0).ToString("x8");
 								if (crc32DoubleCheck != crc32)
 								{
 									Log.Instance.Error($"CRC32 hash from the check file '{filePath}' does not match the calculated CRC32 hash of '{contentPath}'. Recalculating everything. ({crc32} != {crc32DoubleCheck})");
