@@ -23,7 +23,8 @@ namespace NusRipper
 		private const string DeletedTitleFileName         = "DeletedTitle.txt"; // The file name of a file used to indicate a title had been deleted from the DSi Shop
 		private const int StartingArchiveId               = 1; // The dat should be the establishing set, so it can start at 0001
 		private const string SerializationDatFile         = "allTitleInfo.dat";
-		private const string GalaxyFileOverrides          = "GalaxyExtras";
+		private const string GalaxyFileOverrides          = "GalaxyOverrides"; // Used for overriding cetks that are different versions than the latest
+		private const string LarsenFileExtras             = "LarsenExtras";    // Used for extra copies of DSi Shop files
 
 		private const string TicketExtension        = "tik";
 		private const string MetadataExtension      = "tmd";
@@ -199,6 +200,8 @@ namespace NusRipper
 		internal static async Task BuildXmlFromFiles(string archiveDir, string outputXmlPath, string outputMediaPath = null, bool makeNdsFiles = false)
 		{
 			Stopwatch mainStopwatch = Stopwatch.StartNew();
+
+			#region Collect Info
 			Stopwatch infoStopwatch = Stopwatch.StartNew();
 
 			bool writeMedia = outputMediaPath != null;
@@ -267,7 +270,7 @@ namespace NusRipper
 							else if (fileName == Ripper.TicketIdFileName)
 								extension = TicketExtension;
 							else if (new FileInfo(filePath)?.Length > 0)
-								extension = await Images.DetermineImageFileExtension(Path.Combine(titleInfo.TitleDir, fileName));
+								extension = await FileIdentification.DetermineImageFileExtension(Path.Combine(titleInfo.TitleDir, fileName));
 							else
 								extension = BinaryExtension;
 
@@ -414,10 +417,10 @@ namespace NusRipper
 							List<Language.LanguageCodes> langs = Language.DetermineLanguage(sanitizedTitle); // Get NTextCat's language predictions
 							langs = (titleInfo.TitleIdHigh == GameTitleIdHigh
 									? langs
-									: langs.Intersect(regionSystemLangs) // System titles have no in-ROM language selector, so we know the only possible supported languages are the ones supported in the settings for the region
+									: langs.Intersect(regionSystemLangs)       // System titles have no in-ROM language selector, so we know the only possible supported languages are the ones supported in the settings for the region
 								)
-								.Intersect(titleConflicts[i].Item3)                                                      // Keep only the languages that are part of the conflict
-								.OrderBy(l => regionLangs.Contains(l) ? 0 : 1)                                           // Prioritize languages that are expected for the region
+								.Intersect(titleConflicts[i].Item3)            // Keep only the languages that are part of the conflict
+								.OrderBy(l => regionLangs.Contains(l) ? 0 : 1) // Prioritize languages that are expected for the region
 								.ToList();
 
 							bool addedLang = false;
@@ -507,7 +510,9 @@ namespace NusRipper
 					return;
 				}
 			}
+			#endregion
 
+			#region Build Dat
 			Stopwatch datStopwatch = Stopwatch.StartNew();
 			Log.Instance.Info("Beginning the dat file creation.");
 
@@ -561,14 +566,15 @@ namespace NusRipper
 						return (parts[0], parts[1]);
 					},
 					d => DateTime.Parse(d, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+
 				Dictionary<string, RomEntry> GalaxyMismatchedTickets = new Dictionary<string, RomEntry>();
 				foreach (string titlePath in Directory.EnumerateDirectories(Path.Combine(Path.GetDirectoryName(archiveDir), GalaxyFileOverrides)))
 				{
-					string titleId = Path.GetFileName(titlePath);
+					string titleId = Path.GetFileName(titlePath).ToUpperInvariant();
 					foreach (string titleFilePath in Directory.EnumerateFiles(titlePath))
 					{
 						string titleFile = Path.GetFileName(titleFilePath);
-						(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(titleFilePath);
+						(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(titleFilePath, true);
 						modTime ??= File.GetLastWriteTime(titleFilePath);
 
 						ushort version = TicketBooth.GetTicketVersion(titleFilePath);
@@ -584,6 +590,27 @@ namespace NusRipper
 							versionStr,
 							displayName: displayName,
 							specificDumper: DumperNames.Galaxy);
+					}
+				}
+
+				Dictionary<string, List<RomEntry>> LarsenShopFiles = new Dictionary<string, List<RomEntry>>();
+				foreach (string titlePath in Directory.EnumerateDirectories(Path.Combine(Path.GetDirectoryName(archiveDir), LarsenFileExtras)))
+				{
+					string titleId = Path.GetFileName(titlePath).ToUpperInvariant();
+					LarsenShopFiles[titleId] = new List<RomEntry>();
+					foreach (string titleFilePath in Directory.EnumerateFiles(titlePath))
+					{
+						string titleFile = Path.GetFileName(titleFilePath).ToUpperInvariant();
+						(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(titleFilePath, true);
+						modTime ??= File.GetLastWriteTime(titleFilePath);
+
+						LarsenShopFiles[titleId].Add(new RomEntry(RomEntry.EntryTypes.Miscellaneous,
+							true,
+							titleFile,
+							await FileIdentification.DetermineImageFileExtension(titleFilePath),
+							hashes,
+							modTime,
+							specificDumper: DumperNames.Larsenv));
 					}
 				}
 
@@ -723,13 +750,13 @@ namespace NusRipper
 								serialStr));
 
 							Hasher.FileHashCollection hashesDec = new Hasher.FileHashCollection(Path.Combine(titleInfo.TitleDir, contentFileEntry.Value.fileName));
-							DateTime modTimeDec = File.GetLastWriteTime(Path.Combine(titleInfo.TitleDir, contentFileEntry.Value.fileName));
+							//DateTime modTimeDec = File.GetLastWriteTime(Path.Combine(titleInfo.TitleDir, contentFileEntry.Value.fileName));
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Content,
 								false,
 								contentFileEntry.Value.fileName,
 								contentFileEntry.Value.info.ValidContent ? DecryptedGameExtension : BinaryExtension,
 								hashesDec,
-								modTimeDec,
+								null,
 								versionStr,
 								serialStr,
 								contentFileEntry.Key));
@@ -859,6 +886,8 @@ namespace NusRipper
 												e.Encrypted &&
 												DatFilesSetLarsen.Contains((titleInfo.TitleId, e.FileName)))
 											.ToList()));
+									if(LarsenShopFiles.TryGetValue(titleInfo.TitleId, out List<RomEntry> shopFileEntries))
+										dumperEntries.Add(("2019-02-03", shopFileEntries)); // Date is from https://archive.org/details/NintendoDSiShopBackup upload date
 									break;
 							}
 
@@ -957,10 +986,12 @@ namespace NusRipper
 			}
 
 			Log.Instance.Info($"Completed the dat file creation in {datStopwatch.ElapsedAfterStopped().ToNiceString()}.");
+			#endregion
+
 			Log.Instance.Info($"Completed the batch processing in {mainStopwatch.ElapsedAfterStopped().ToNiceString()}.");
 		}
 
-		private static (Hasher.FileHashCollection hashes, DateTime? modTime) GetFileMetaInfo(string filePath)
+		private static (Hasher.FileHashCollection hashes, DateTime? modTime) GetFileMetaInfo(string filePath, bool expectMissingFiles = false)
 		{
 			DateTime? modTime = null;
 			if (File.Exists(filePath + Ripper.HeaderFileSuffix))
@@ -976,9 +1007,9 @@ namespace NusRipper
 					break;
 				}
 
-			Hasher.FileHashCollection hashes = Hasher.FileHashCollection.ReadFromFile(filePath + Ripper.HashesFileSuffix, filePath);
+			Hasher.FileHashCollection hashes = Hasher.FileHashCollection.ReadFromFile(filePath + Ripper.HashesFileSuffix, filePath, expectMissingFiles);
 
-			if(modTime == null)
+			if(!expectMissingFiles && modTime == null)
 				Log.Instance.Error($"Unable to get the upload date from the file '{filePath + Ripper.HeaderFileSuffix}'.");
 
 			return (hashes, modTime);

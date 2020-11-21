@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace NusRipper
 {
-	public static class Images
+	public static class FileIdentification
 	{
 		private const int MagicSampleSize = 32;
 		
@@ -15,12 +15,6 @@ namespace NusRipper
 		private static readonly byte[] JpegMagic = { 0xFF, 0xD8, 0xFF }; // ÿØÿ
 		private static readonly byte[] PngMagic  = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }; // .PNG....
 		private static readonly byte[] ZipMagic  = { 0x50, 0x4B }; // PK
-
-		public class UnknownFileTypeException : Exception
-		{
-			public UnknownFileTypeException() : base() {}
-			public UnknownFileTypeException(string message) : base(message) {}
-		}
 
 		public static async Task<string> DetermineImageFileExtension(string path)
 		{
@@ -42,7 +36,8 @@ namespace NusRipper
 			if (startingBytes.StartsWith(ZipMagic))
 				return "zip";
 
-			throw new UnknownFileTypeException($"Unknown file type for file '{path}'");
+			Log.Instance.Error($"Unknown file type for file '{path}'.");
+			return "bin";
 		}
 	}
 }

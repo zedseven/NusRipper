@@ -67,7 +67,7 @@ namespace NusRipper
 				}
 			}
 
-			public static FileHashCollection ReadFromFile(string filePath, string contentPath = null)
+			public static FileHashCollection ReadFromFile(string filePath, string contentPath = null, bool expectMissingFiles = false)
 			{
 				if (!File.Exists(filePath))
 				{
@@ -76,7 +76,8 @@ namespace NusRipper
 						Log.Instance.Error($"Unable to read hashes from the file '{filePath}'. The content file '{contentPath}' does not exist either.");
 						return null;
 					}
-					Log.Instance.Error($"Unable to read hashes from the file '{filePath}'. Recalculating from the content file '{contentPath}'.");
+					if (!expectMissingFiles)
+						Log.Instance.Error($"Unable to read hashes from the file '{filePath}'. Recalculating from the content file '{contentPath}'.");
 					return new FileHashCollection(contentPath);
 				}
 
