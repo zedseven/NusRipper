@@ -11,7 +11,10 @@ namespace NusRipper
 {
 	internal static class Decryptor
 	{
-		private static readonly string[] KeyGenTryPasswords = { "nintendo", "mypass", "FB10", "test", "", "password", "twilight", "twl", "shop" };
+		public const string TitlePasswordFileName = "titlePass.txt";
+		public const string TitleKeyFileName      = "titleKey.bin";
+
+		private static readonly string[] KeyGenTryPasswords = { "nintendo", "mypass", "FB10", "test", "", "password", "twilight", "twl", "shop", "dev", "system", "bios", "5678", "dsi", "nus", "ccs", "common", "cetk", "eticket", "commoneticket", "ceticket", "update", "sys", "tad", "wii", "rvl", "revolution", "tss", "soap", "SOAP", "ds", "nds", "ntr", "nitro", "ニンテンドー" };
 
 		internal static async Task DecryptEntries(byte[] commonKey, string archiveDir, bool makeQolFiles = false/*, int maxThreads = -1*/)
 		{
@@ -29,6 +32,7 @@ namespace NusRipper
 		internal static async Task DecryptEntry(byte[] commonKey, string titleDir, bool makeQolFiles = false)
 		{
 			string titleId = Path.GetFileName(titleDir);
+			byte[] titleIdBytes = Helpers.HexStringToBytes(titleId);
 
 			Log.Instance.Info($"Starting on '{titleId}'.");
 
@@ -41,7 +45,7 @@ namespace NusRipper
 				Log.Instance.Trace($"A ticket exists for '{titleDir}'.");
 				ticket = new TicketBooth.Ticket(commonKey, titleId, ticketPath);
 				foreach (string metadataPath in metadataFiles)
-					decryptedContents.AddRange(await DecryptMetadataContents(ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
+					decryptedContents.AddRange(await DecryptMetadataContents(titleIdBytes, ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
 			}
 			else
 			{
@@ -50,13 +54,12 @@ namespace NusRipper
 					if (ticket == null)
 					{
 						(TicketBooth.Ticket ticket, List<string> contentsList) res =
-							await MakeTicketAndDecryptMetadataContents(Helpers.HexStringToBytes(titleId),
-								new TitleMetadata(metadataPath), titleDir, makeQolFiles);
+							await MakeTicketAndDecryptMetadataContents(titleIdBytes, new TitleMetadata(metadataPath), titleDir, makeQolFiles);
 						ticket = res.ticket;
 						decryptedContents.AddRange(res.contentsList);
 					}
 					else
-						decryptedContents.AddRange(await DecryptMetadataContents(ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
+						decryptedContents.AddRange(await DecryptMetadataContents(titleIdBytes, ticket, new TitleMetadata(metadataPath), titleDir, makeQolFiles));
 				}
 			}
 
@@ -97,8 +100,12 @@ namespace NusRipper
 					continue;
 				Log.Instance.Trace($"'{tryPass}' is the password for the title key of '{contentPath}'!");
 
-				// Somewhat redundant given the CRC validation of the decrypted ROM in RomInfo, but still
-				VerifyMetadataContent(metadata, appPath, 0, titleDir, metadata.ContentInfo[0].Id.ToString("x8"));
+				// Somewhat redundant given the CRC validation of the decrypted ROM in RomInfo, but still good to check
+				if (VerifyMetadataContent(metadata, appPath, 0, titleDir, metadata.ContentInfo[0].Id.ToString("x8")))
+				{
+					await File.WriteAllTextAsync(Path.Combine(titleDir, TitlePasswordFileName), tryPass);
+					await File.WriteAllBytesAsync(Path.Combine(titleDir, TitleKeyFileName), titleKey);
+				}
 
 				contentsList.Add(metadata.ContentInfo[0].Id.ToString("x8"));
 				if (makeQolFiles)
@@ -125,7 +132,7 @@ namespace NusRipper
 			return (ticket, contentsList);
 		}
 
-		public static async Task<List<string>> DecryptMetadataContents(TicketBooth.Ticket ticket, TitleMetadata metadata, string titleDir, bool makeQolFiles = false)
+		public static async Task<List<string>> DecryptMetadataContents(byte[] titleIdBytes, TicketBooth.Ticket ticket, TitleMetadata metadata, string titleDir, bool makeQolFiles = false)
 		{
 			if (metadata.NumContents <= 0)
 				return new List<string>();
@@ -140,7 +147,15 @@ namespace NusRipper
 
 				// TODO: Could verify enc and dec file sizes match metadata recorded size, but at this point I don't think it's worth the additional processing time.
 
-				VerifyMetadataContent(metadata, appPath, i, titleDir, contentName);
+				if (VerifyMetadataContent(metadata, appPath, i, titleDir, contentName))
+				{
+					string titlePass = DeriveTitlePassFromKey(titleIdBytes, ticket.TitleKey);
+					if (titlePass != null)
+						await File.WriteAllTextAsync(Path.Combine(titleDir, TitlePasswordFileName), titlePass);
+					else
+						Log.Instance.Error($"Unable to find the title pass for title '{titleDir}'.");
+					await File.WriteAllBytesAsync(Path.Combine(titleDir, TitleKeyFileName), ticket.TitleKey);
+				}
 
 				if (i != 0 || !makeQolFiles)
 					continue;
@@ -174,8 +189,23 @@ namespace NusRipper
 				return;
 			using (File.Create(Path.Combine(titleDir, Helpers.GetSafeFilename($"{info.GetProperName(true)}.txt")))) { }
 
-			info.StaticIcon?.SaveAsPng(Path.Combine(titleDir, "icon.png"));
-			info.AnimatedIcon?.SaveAsGif(Path.Combine(titleDir, "icon.gif"), new GifEncoder { ColorTableMode = GifColorTableMode.Local });
+			string staticPath = Path.Combine(titleDir, "icon.png");
+			string animatedPath = Path.Combine(titleDir, "icon.gif");
+			if (!File.Exists(staticPath))
+				info.StaticIcon?.SaveAsPng(staticPath);
+			if (!File.Exists(animatedPath))
+				info.AnimatedIcon?.SaveAsGif(animatedPath, new GifEncoder { ColorTableMode = GifColorTableMode.Local });
+		}
+
+		public static string DeriveTitlePassFromKey(byte[] titleIdBytes, byte[] titleKey)
+		{
+			foreach (string tryPass in KeyGenTryPasswords.Concat(new []{ new string(titleIdBytes.Slice(4, 4).AsChars()).ToUpperInvariant() }))
+			{
+				byte[] tryTitleKey = TitleKeyGen.Derive(titleIdBytes, tryPass);
+				if (tryTitleKey == titleKey)
+					return tryPass;
+			}
+			return null;
 		}
 	}
 }

@@ -7,8 +7,9 @@ namespace NusRipper
 	[Serializable]
 	public class TitleMetadata
 	{
+		private const int TitleIdOffset      = 0x0000018C;
 		private const int TitleVersionOffset = 0x000001DC;
-		private const int NumContentsOffset = 0x000001DE;
+		private const int NumContentsOffset  = 0x000001DE;
 		private const int ContentsListOffset = 0x000001E4;
 		private const int BytesPerContentChunk = 36;
 
@@ -30,6 +31,7 @@ namespace NusRipper
 		}
 
 		public readonly string FileName;
+		public readonly string TitleId;
 		public readonly ushort TitleVersion;
 		public readonly short NumContents;
 		public readonly TitleContentInfo[] ContentInfo;
@@ -51,6 +53,7 @@ namespace NusRipper
 
 			byte[] bytes = File.ReadAllBytes(metadataPath);
 
+			TitleId = bytes.Slice(TitleIdOffset, 8).ToHexString().ToUpperInvariant();
 			TitleVersion = BitConverter.ToUInt16(bytes.Slice(TitleVersionOffset, 2, true));
 			NumContents = BitConverter.ToInt16(bytes.Slice(NumContentsOffset, 2, true));
 			List<TitleContentInfo> contentInfo = new List<TitleContentInfo>();

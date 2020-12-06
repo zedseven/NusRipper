@@ -9,12 +9,13 @@ namespace NusRipper
 	public static class TicketBooth
 	{
 		public const string DecryptedContentExtension = "app";
+		private const int TitleIdOffset  = 0x000001DC;
 		private const int TitleKeyOffset = 0x000001BF;
-		private const int VersionOffset = 0x000001E6;
+		private const int VersionOffset  = 0x000001E6;
 
 		public class Ticket
 		{
-			private readonly byte[] titleKey;
+			public readonly byte[] TitleKey;
 
 			public Ticket(byte[] commonKey, string titleId, string ticketPath)
 			{
@@ -38,12 +39,12 @@ namespace NusRipper
 					cs.Write(encTitleKey);
 					cs.FlushFinalBlock();
 
-					titleKey = ms.ToArray();
+					TitleKey = ms.ToArray();
 				}
 			}
 
 			public Ticket(byte[] decTitleKey)
-				=> titleKey = decTitleKey;
+				=> TitleKey = decTitleKey;
 
 			public async Task<string> DecryptContent(ushort contentIndex, string encPath, string decExt = DecryptedContentExtension)
 			{
@@ -55,7 +56,7 @@ namespace NusRipper
 					Padding = PaddingMode.None,
 					KeySize = 128,
 					BlockSize = 128,
-					Key = titleKey,
+					Key = TitleKey,
 					IV = BitConverter.IsLittleEndian ? BitConverter.GetBytes(contentIndex).Reverse().ToArray().Pad(16) : BitConverter.GetBytes(contentIndex).Pad(16)
 				};
 
@@ -70,6 +71,12 @@ namespace NusRipper
 				return decPath;
 			}
 		}
+
+		public static string GetTicketTitleId(string ticketPath)
+			=> File.ReadAllBytes(ticketPath)
+					.Slice(TitleIdOffset, 8)
+					.ToHexString()
+					.ToUpperInvariant();
 
 		public static ushort GetTicketVersion(string ticketPath)
 			=> BitConverter.ToUInt16(

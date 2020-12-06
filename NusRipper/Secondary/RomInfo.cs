@@ -169,7 +169,6 @@ namespace NusRipper
 			GifMetadata gifMetadata = AnimatedIcon.Metadata.GetFormatMetadata(GifFormat.Instance);
 			gifMetadata.RepeatCount = 0;
 			gifMetadata.Comments = new List<string> { $"Icon for the DSiWare title \"{GetFriendlyTitle()}\" (game code \"{GameCode}\")." };
-			// TODO: Some gifs with regions that change transparency experience ghosting (Go Fetch! 2 is a good example)
 		}
 
 		private byte[] ParseBitmapIndices(byte[] bitmapBytes)

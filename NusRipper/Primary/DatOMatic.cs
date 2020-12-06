@@ -20,9 +20,9 @@ namespace NusRipper
 	{
 		private const string LastModifiedLabel            = "Last-Modified";
 		private const string RemoveNoIntroDisallowedChars = @"[^a-zA-Z0-9 $!#%'()+,\-.;=@\[\]\^_{}~]";
-		private const string DeletedTitleFileName         = "DeletedTitle.txt"; // The file name of a file used to indicate a title had been deleted from the DSi Shop
+		private const string DeletedTitleFileName         = "deletedTitle.txt"; // The file name of a file used to indicate a title had been deleted from the DSi Shop
 		private const int StartingArchiveId               = 1; // The dat should be the establishing set, so it can start at 0001
-		private const string SerializationDatFile         = "allTitleInfo.dat";
+		private const string SerializationDatFile         = "allTitleInfo.bin";
 		private const string GalaxyFileOverrides          = "GalaxyOverrides"; // Used for overriding cetks that are different versions than the latest
 		private const string LarsenFileExtras             = "LarsenExtras";    // Used for extra copies of DSi Shop files
 
@@ -34,6 +34,7 @@ namespace NusRipper
 
 		private const string MainContentItemName = "Main Content";
 		private const string MiscContentItemName = "Miscellaneous Content";
+		private const string MetaContentItemName = "Meta Content";
 
 		private const string GameTitleIdHigh = "00030004";
 
@@ -145,6 +146,7 @@ namespace NusRipper
 			public List<string> ContentEncryptedFiles = new List<string>();
 			public Dictionary<string, (string fileName, RomInfo info, int metadataIndex)> ContentDecryptedFiles = new Dictionary<string, (string fileName, RomInfo info, int metadataIndex)>();
 			public List<(string fileName, string extension)> MiscellaneousFiles = new List<(string fileName, string extension)>();
+			public List<string> MetaFiles = new List<string>();
 
 			// Working Variables
 			public string TitleDir;
@@ -159,7 +161,8 @@ namespace NusRipper
 				Ticket,
 				Metadata,
 				Content,
-				Miscellaneous
+				Miscellaneous,
+				Meta
 			}
 
 			public readonly EntryTypes Type;
@@ -241,6 +244,10 @@ namespace NusRipper
 						{
 							titleInfo.Deleted = true;
 							continue;
+						}
+						if (fileName == Decryptor.TitlePasswordFileName || fileName == Decryptor.TitleKeyFileName)
+						{
+							titleInfo.MetaFiles.Add(fileName);
 						}
 						if (fileName == Ripper.TicketFileName)
 						{
@@ -682,6 +689,7 @@ namespace NusRipper
 							(Hasher.FileHashCollection hashes, DateTime? modTime) = GetFileMetaInfo(Path.Combine(titleInfo.TitleDir, fileName));
 							string displayName = $"{fileName}.{version}";
 							string versionStr = $"{version},{TitleMetadata.VersionToHumanReadable(version)}";
+							string serialStr = TicketBooth.GetTicketTitleId(Path.Combine(titleInfo.TitleDir, fileName));
 							
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Ticket,
 								true,
@@ -690,7 +698,8 @@ namespace NusRipper
 								hashes,
 								modTime,
 								versionStr,
-								displayName: displayName));
+								serialStr,
+								displayName));
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Ticket,
 								false,
 								fileName,
@@ -698,7 +707,8 @@ namespace NusRipper
 								hashes,
 								modTime,
 								versionStr,
-								displayName: displayName));
+								serialStr,
+								displayName));
 						}
 
 						// Metadata files
@@ -715,14 +725,16 @@ namespace NusRipper
 								MetadataExtension,
 								hashes,
 								modTime,
-								versionStr));
+								versionStr,
+								metadata.TitleId));
 							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Metadata,
 								false,
 								fileName,
 								MetadataExtension,
 								hashes,
 								modTime,
-								versionStr));
+								versionStr,
+								metadata.TitleId));
 						}
 
 						// Content files
@@ -785,6 +797,27 @@ namespace NusRipper
 								hashes,
 								modTime,
 								versionStr,
+								specificDumper: DumperNames.zedseven));
+						}
+
+						// Meta Files
+						foreach (string fileName in titleInfo.MetaFiles)
+						{
+							Hasher.FileHashCollection hashes = new Hasher.FileHashCollection(Path.Combine(titleInfo.TitleDir, fileName));
+
+							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Meta,
+								true,
+								fileName,
+								"",
+								hashes,
+								null,
+								specificDumper: DumperNames.zedseven));
+							romEntries.Add(new RomEntry(RomEntry.EntryTypes.Meta,
+								false,
+								fileName,
+								"",
+								hashes,
+								null,
 								specificDumper: DumperNames.zedseven));
 						}
 
@@ -911,13 +944,18 @@ namespace NusRipper
 								await xWriter.WriteAttributeAsync("dumper",           dumperName.ToString());
 								await xWriter.WriteAttributeAsync("project",          "");
 								await xWriter.WriteAttributeAsync("session",          "");
-								await xWriter.WriteAttributeAsync("tool",             dumperName == DumperNames.zedseven ? "NUS Ripper v" + Constants.ProgramVersion : "Custom");
+								await xWriter.WriteAttributeAsync("tool",             dumperName switch
+									{
+										DumperNames.zedseven => "NUS Ripper v" + Constants.ProgramVersion,
+										DumperNames.Galaxy   => "Custom",
+										DumperNames.Larsenv  => "!unknown"
+									});
 								await xWriter.WriteAttributeAsync("origin",           "CDN");
 								await xWriter.WriteAttributeAsync("comment1",         "");
 								await xWriter.WriteAttributeAsync("comment2",         "");
 								await xWriter.WriteAttributeAsync("link1",            "");
 								await xWriter.WriteAttributeAsync("link2",            "");
-								await xWriter.WriteAttributeAsync("region",           "");
+								await xWriter.WriteAttributeAsync("region",           titleInfo.Region.ToString());
 								await xWriter.WriteAttributeAsync("mediatitle",       "");
 								await xWriter.WriteEndElementAsync();
 								xWriter.WriteStartElement("serials");
@@ -970,13 +1008,19 @@ namespace NusRipper
 							List<string> additionalInfo = new List<string> { titleInfo.Region.ToString() };
 							if (titleInfo.Found3dsPort)
 								additionalInfo.Add(titleInfo.LanguagesStr);
+							if (titleInfo.System)
+								additionalInfo.Add("System");
 
-							File.Copy(
+							try
+							{
+								File.Copy(
 								Path.Combine(titleInfo.TitleDir,
 									titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].fileName),
 								Path.Combine(titleInfo.TitleDir,
 									$"{titleInfo.NoIntroTitle} {string.Join(' ', additionalInfo.Select(s => $"({s})"))}.{(titleInfo.ContentDecryptedFiles[titleInfo.NewestContentId].info.ValidContent ? DecryptedGameExtension : BinaryExtension)}"),
-								true);
+								false);
+							}
+							catch (IOException) { }
 						}
 
 						archiveId++;
@@ -1021,7 +1065,12 @@ namespace NusRipper
 			await writer.WriteAttributeAsync("dirname",   "");
 			await writer.WriteAttributeAsync("forcename", entry.DisplayName ?? entry.FileName);
 			await writer.WriteAttributeAsync("extension", entry.Extension);
-			await writer.WriteAttributeAsync("item",      entry.Type != RomEntry.EntryTypes.Miscellaneous ? MainContentItemName : MiscContentItemName);
+			await writer.WriteAttributeAsync("item",      entry.Type switch
+				{
+					RomEntry.EntryTypes.Meta => MetaContentItemName,
+					RomEntry.EntryTypes.Miscellaneous => MiscContentItemName,
+					_ => MainContentItemName
+				});
 			await writer.WriteAttributeAsync("date",      entry.ModTime?.ToString("yyyy-MM-dd"));
 			await writer.WriteAttributeAsync("format",    entry.Encrypted ? "CDN" : "CDNdec");
 			await writer.WriteAttributeAsync("version",   entry.VersionStr);
